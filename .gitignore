@@ -9,6 +9,10 @@ __pycache__/
 .vscode/
 .idea/
 *.log
+*.pyc
+*.log
+.DS_Store
+
 
 # Model weights / caches
 models/
