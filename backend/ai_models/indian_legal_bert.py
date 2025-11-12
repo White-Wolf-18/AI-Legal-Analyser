@@ -165,3 +165,18 @@ class IndianLegalBERT:
         
         self.id_to_label = {int(k): v for k, v in label_mapping['id_to_label'].items()}
         self.label_to_id = {v: int(k) for k, v in label_mapping['label_to_id'].items()}
+
+    def get_relevant_law(self, clause_type: str):
+        """Return the most relevant Indian law based on clause type or keyword"""
+        mapping = {
+            "liability": "Indian Contract Act, 1872 (Sections 73–75)",
+            "interest": "Indian Contract Act, 1872 (Section 23 – Lawful consideration)",
+            "security": "SARFAESI Act, 2002 (Section 13 – Enforcement of security interest)",
+            "confidentiality": "Information Technology Act, 2000 (Section 72 – Breach of confidentiality and privacy)",
+            "employment": "Industrial Disputes Act, 1947 (Employee rights and obligations)",
+            "termination": "Indian Contract Act, 1872 (Section 39 – Effect of refusal to perform promise)",
+            "penalty": "Indian Contract Act, 1872 (Section 74 – Penalty for breach of contract)"
+        }
+        return mapping.get(clause_type.lower(), "Indian Contract Act, 1872")
+
+

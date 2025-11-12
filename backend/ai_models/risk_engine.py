@@ -1,409 +1,266 @@
 import re
 import json
 from typing import Dict, List, Tuple, Any
-# from models.user import LegalStatute
-# from sqlalchemy import func
 import spacy
 from transformers import pipeline
 import logging
 
 class AdvancedRiskEngine:
-    def __init__(self, db_session):
+    """
+    Enhanced risk analysis engine for Indian legal documents.
+    Context-aware clause-level risk evaluation with statute references
+    and adaptive recommendations.
+    """
+    def __init__(self, db_session=None):
         self.db = db_session
         self.nlp = spacy.load("en_core_web_sm")
         self.statute_cache = self._load_statutes()
-        
-        # Initialize legal reference pipeline
+
+        # QA pipeline for contextual statute reference extraction
         self.legal_reference_pipeline = pipeline(
             "question-answering",
             model="deepset/roberta-base-squad2"
         )
-        
-        # Define dynamic risk patterns with explanations
+
+        # Dynamic risk patterns mapped to Indian statutes
         self.risk_patterns = {
-            'high': [
+            "high": [
                 {
-                    'pattern': r'unlimited.*liability',
-                    'explanation': 'Unlimited liability clauses can expose parties to excessive financial risk beyond reasonable bounds',
-                    'statute_reference': 'Indian Contract Act, 1872 - Section 73: Compensation for breach of contract'
+                    "pattern": r"unlimited.*liability",
+                    "explanation": "Unlimited liability clauses can expose parties to excessive financial risk beyond reasonable bounds.",
+                    "statute_reference": "Indian Contract Act, 1872 – Section 73"
                 },
                 {
-                    'pattern': r'forfeit.*deposit',
-                    'explanation': 'Deposit forfeiture clauses without proper justification can be legally challenged',
-                    'statute_reference': 'Transfer of Property Act, 1882 - Deposit refund obligations'
+                    "pattern": r"forfeit.*deposit",
+                    "explanation": "Deposit forfeiture without due cause can be legally challenged under property laws.",
+                    "statute_reference": "Transfer of Property Act, 1882 – Deposit refund obligations"
                 },
                 {
-                    'pattern': r'compulsory.*bond',
-                    'explanation': 'Compulsory bonds may violate labor laws and employee rights',
-                    'statute_reference': 'Industrial Disputes Act, 1947 - Employee rights and obligations'
+                    "pattern": r"non[- ]?compete.*\d+.*year",
+                    "explanation": "Excessive non-compete durations may be unenforceable in India.",
+                    "statute_reference": "Indian Contract Act, 1872 – Section 27: Restraint of trade"
                 },
                 {
-                    'pattern': r'non-compete.*period.*\d+.*years?',
-                    'explanation': 'Excessive non-compete periods may be unenforceable in Indian courts',
-                    'statute_reference': 'Indian Contract Act, 1872 - Section 27: Restraint of trade'
+                    "pattern": r"penalty.*\d+%",
+                    "explanation": "High penalty rates may be deemed excessive and void under Indian law.",
+                    "statute_reference": "Indian Contract Act, 1872 – Section 74: Penalty for breach of contract"
+                },
+            ],
+            "medium": [
+                {
+                    "pattern": r"subject.*to.*change",
+                    "explanation": "Clauses that allow unilateral change create uncertainty and imbalance.",
+                    "statute_reference": "Indian Contract Act, 1872 – Section 62"
                 },
                 {
-                    'pattern': r'penalty.*\d+%',
-                    'explanation': 'High penalty rates may be considered excessive and void under Indian law',
-                    'statute_reference': 'Indian Contract Act, 1872 - Section 74: Penalty for breach of contract'
+                    "pattern": r"reasonable.*time",
+                    "explanation": "Ambiguous ‘reasonable time’ wording can lead to disputes.",
+                    "statute_reference": "Indian Contract Act, 1872 – Section 55"
+                },
+                {
+                    "pattern": r"at.*discretion",
+                    "explanation": "Discretion clauses must specify limits to avoid arbitrary enforcement.",
+                    "statute_reference": "Indian Contract Act, 1872 – Section 56"
                 }
             ],
-            'medium': [
+            "low": [
                 {
-                    'pattern': r'reasonable.*time',
-                    'explanation': 'Ambiguous "reasonable" timeframes can lead to disputes and legal uncertainty',
-                    'statute_reference': 'Indian Contract Act, 1872 - Section 55: Impossibility of performance'
-                },
-                {
-                    'pattern': r'subject.*to.*change',
-                    'explanation': 'Terms subject to change without notice can create contractual instability',
-                    'statute_reference': 'Indian Contract Act, 1872 - Section 62: Alteration of contracts'
-                },
-                {
-                    'pattern': r'may.*modify',
-                    'explanation': 'Unilateral modification rights without consent can be problematic',
-                    'statute_reference': 'Indian Contract Act, 1872 - Section 62: Alteration of contracts'
-                },
-                {
-                    'pattern': r'at.*discretion',
-                    'explanation': 'Vague discretion clauses can lead to arbitrary enforcement',
-                    'statute_reference': 'Indian Contract Act, 1872 - Section 56: Void agreements'
-                }
-            ],
-            'low': [
-                {
-                    'pattern': r'as.*per.*law',
-                    'explanation': 'Standard legal compliance clauses are generally acceptable',
-                    'statute_reference': 'Constitution of India - Article 14: Equality before law'
-                },
-                {
-                    'pattern': r'fair.*practice',
-                    'explanation': 'Fair practice clauses are generally acceptable but may need specific definition',
-                    'statute_reference': 'Consumer Protection Act, 2019 - Fair trade practices'
+                    "pattern": r"as.*per.*law",
+                    "explanation": "Standard compliance language is generally valid.",
+                    "statute_reference": "Constitution of India – Article 14"
                 }
             ]
         }
 
+    # -------------------------------------------------------------------------
     def _load_statutes(self):
-        """Load sample legal statutes (in-memory, no DB)."""
+        """Minimal built-in legal statutes."""
         return {
-            "Indian Contract Act, 1872 - Section 73": {
+            "Indian Contract Act, 1872 – Section 73": {
                 "section": "Section 73",
-                "description": "Compensation for loss or damage caused by breach of contract",
+                "description": "Compensation for loss or damage caused by breach of contract.",
                 "keywords": ["breach", "compensation", "damages", "loss"],
-                "applicable_clauses": ["loan", "employment", "rental"]
+                "applicable_clauses": ["loan", "employment", "rental", "partnership"]
             },
-            "Indian Contract Act, 1872 - Section 27": {
+            "Indian Contract Act, 1872 – Section 27": {
                 "section": "Section 27",
-                "description": "Agreement in restraint of trade is void",
-                "keywords": ["non-compete", "trade", "restraint"],
+                "description": "Agreements in restraint of trade are void.",
+                "keywords": ["non-compete", "restraint", "trade"],
                 "applicable_clauses": ["employment", "partnership"]
             },
-            "Indian Contract Act, 1872 - Section 74": {
+            "Indian Contract Act, 1872 – Section 74": {
                 "section": "Section 74",
-                "description": "Penalty for breach of contract",
+                "description": "Penalty for breach of contract.",
                 "keywords": ["penalty", "fine", "default"],
                 "applicable_clauses": ["loan", "employment", "rental"]
+            },
+            "SARFAESI Act, 2002": {
+                "section": "Section 13",
+                "description": "Enforcement of security interest by secured creditors.",
+                "keywords": ["security", "pledge", "collateral"],
+                "applicable_clauses": ["loan", "security", "mortgage"]
             }
         }
 
-
+    # -------------------------------------------------------------------------
     def analyze_risk_with_statutes(self, clause: str, clause_type: str) -> Dict:
-        """Analyze risk by cross-referencing against Indian legal statutes"""
+        """Perform multi-layer risk analysis for a given clause."""
         clause_lower = clause.lower()
-        
-        # Get relevant statutes for this clause type
-        relevant_statutes = []
-        for name, statute in self.statute_cache.items():
-            if clause_type in statute['applicable_clauses']:
-                relevant_statutes.append((name, statute))
 
-        # Analyze against predefined patterns
         pattern_violations = self._analyze_pattern_violations(clause)
-        
-        # Analyze against statutes
         statute_violations = []
         compliance_issues = []
         legal_references = []
 
-        for statute_name, statute_info in relevant_statutes:
-            for keyword in statute_info['keywords']:
-                if keyword.lower() in clause_lower:
-                    violation_analysis = self._analyze_keyword_context(
-                        clause, keyword.lower(), statute_info
-                    )
-                    
-                    if violation_analysis['is_violation']:
-                        statute_violations.append({
-                            'statute': statute_name,
-                            'section': statute_info['section'],
-                            'violation': violation_analysis['violation_description'],
-                            'keyword': keyword,
-                            'severity': violation_analysis['severity'],
-                            'explanation': violation_analysis['explanation']
-                        })
-                    elif violation_analysis['compliance_issue']:
-                        compliance_issues.append({
-                            'statute': statute_name,
-                            'section': statute_info['section'],
-                            'issue': violation_analysis['compliance_description'],
-                            'keyword': keyword,
-                            'explanation': violation_analysis['explanation']
-                        })
-            
-            legal_references.append({
-                'statute': statute_name,
-                'section': statute_info['section'],
-                'description': statute_info['description'],
-                'relevance_score': self._calculate_relevance(clause, statute_info['keywords'])
-            })
-
-        # Combine pattern and statute analysis
-        all_violations = pattern_violations + statute_violations
-        
-        # Calculate risk score based on violations and compliance issues
-        high_violations = len([v for v in all_violations if v.get('severity') == 'high'])
-        medium_violations = len([v for v in all_violations if v.get('severity') == 'medium'])
-        compliance_issues_count = len(compliance_issues)
-        
-        risk_score = min((high_violations * 0.4 + medium_violations * 0.2 + compliance_issues_count * 0.1), 1.0)
-
-        if risk_score >= 0.7:
-            risk_level = 'high'
-        elif risk_score >= 0.3:
-            risk_level = 'medium'
-        else:
-            risk_level = 'low'
-
-        return {
-            'risk_level': risk_level,
-            'risk_score': risk_score,
-            'violations': all_violations,
-            'compliance_issues': compliance_issues,
-            'legal_references': legal_references,
-            'statute_references': [statute_name for statute_name, _ in relevant_statutes],
-            'pattern_violations': pattern_violations
-        }
-
-    def _analyze_pattern_violations(self, clause: str) -> List[Dict]:
-        """Analyze clause against predefined risk patterns"""
-        violations = []
-        clause_lower = clause.lower()
-        
-        for severity, patterns in self.risk_patterns.items():
-            for pattern_info in patterns:
-                if re.search(pattern_info['pattern'], clause_lower, re.IGNORECASE):
-                    violations.append({
-                        'type': 'pattern_violation',
-                        'severity': severity,
-                        'pattern': pattern_info['pattern'],
-                        'explanation': pattern_info['explanation'],
-                        'statute_reference': pattern_info['statute_reference'],
-                        'violation_description': f"Pattern violation: {pattern_info['explanation']}"
-                    })
-        
-        return violations
-
-    def _analyze_keyword_context(self, clause: str, keyword: str, statute_info: Dict) -> Dict:
-        """Analyze the context of a keyword to determine if it's a violation or compliance issue"""
-        clause_lower = clause.lower()
-        
-        # Define violation patterns that indicate non-compliance
-        violation_patterns = [
-            r'contrary to',
-            r'not in accordance with',
-            r'without following',
-            r'despite requirements',
-            r'except when',
-            r'subject to.*violation',
-            f'not {keyword}',
-            f'without {keyword}',
-        ]
-        
-        # Define compliance issue patterns (ambiguous or non-specific language)
-        compliance_patterns = [
-            r'not clearly defined',
-            r'not specified',
-            r'at discretion',
-            r'as required',
-            r'if necessary',
-            r'when possible',
-            r'reasonable.*time',
-            r'appropriate.*action',
-            r'subject to.*change',
-            r'may.*modify',
-        ]
-        
-        # Check for violations
-        for pattern in violation_patterns:
-            if re.search(pattern, clause_lower, re.IGNORECASE):
-                return {
-                    'is_violation': True,
-                    'violation_description': f"Potential violation of {statute_info['section']}: Clause may contradict {statute_info['section']}",
-                    'compliance_issue': False,
-                    'severity': 'high',
-                    'explanation': f"This clause appears to contradict {statute_info['section']} of {statute_info['description']}. This could render the clause unenforceable."
-                }
-        
-        # Check for compliance issues
-        for pattern in compliance_patterns:
-            if re.search(pattern, clause_lower, re.IGNORECASE):
-                return {
-                    'is_violation': False,
-                    'violation_description': '',
-                    'compliance_issue': True,
-                    'compliance_description': f"Compliance issue with {statute_info['section']}: Clause contains ambiguous language",
-                    'severity': 'medium',
-                    'explanation': f"The clause contains ambiguous language that doesn't clearly comply with {statute_info['section']}. This could lead to legal disputes."
-                }
-        
-        # Check for positive compliance indicators
-        compliance_indicators = [
-            r'in accordance with',
-            r'as per',
-            r'compliant with',
-            r'pursuant to',
-            f'under {statute_info["section"]}',
-        ]
-        
-        for indicator in compliance_indicators:
-            if re.search(indicator, clause_lower, re.IGNORECASE):
-                return {
-                    'is_violation': False,
-                    'violation_description': '',
-                    'compliance_issue': False,
-                    'compliance_description': '',
-                    'severity': 'low',
-                    'explanation': f"The clause appears to comply with {statute_info['section']} of {statute_info['description']}."
-                }
-        
-        # Default: no clear violation or compliance
-        return {
-            'is_violation': False,
-            'violation_description': '',
-            'compliance_issue': True,
-            'compliance_description': f"Review needed: Clause may not clearly reference {statute_info['section']}",
-            'severity': 'low',
-            'explanation': f"The clause doesn't explicitly reference {statute_info['section']}. Consider adding specific legal references for clarity."
-        }
-
-    def get_legal_references(self, clause: str, clause_type: str) -> List[Dict]:
-        """Get legal references for a clause"""
-        legal_refs = []
-        
-        # Find relevant statutes
-        for name, info in self.statute_cache.items():
-            if clause_type in info['applicable_clauses']:
-                legal_refs.append({
-                    'statute': name,
-                    'section': info['section'],
-                    'description': info['description'],
-                    'relevance_score': self._calculate_relevance(clause, info['keywords'])
+        # Cross-check clause with relevant statutes
+        for statute_name, statute in self.statute_cache.items():
+            if clause_type in statute["applicable_clauses"]:
+                relevance = self._calculate_relevance(clause, statute["keywords"])
+                legal_references.append({
+                    "statute": statute_name,
+                    "section": statute["section"],
+                    "description": statute["description"],
+                    "relevance_score": relevance
                 })
-        
-        # Sort by relevance
-        legal_refs.sort(key=lambda x: x['relevance_score'], reverse=True)
-        
-        return legal_refs[:5]  # Return top 5 references
+
+                for keyword in statute["keywords"]:
+                    if keyword in clause_lower:
+                        if re.search(r"not\s+" + re.escape(keyword), clause_lower):
+                            statute_violations.append({
+                                "statute": statute_name,
+                                "section": statute["section"],
+                                "violation": f"Clause contradicts {statute['section']}: missing compliance with {keyword}",
+                                "severity": "high",
+                                "explanation": f"This clause appears to contradict {statute['section']} of {statute_name}."
+                            })
+                        elif "ambiguous" in clause_lower or "unclear" in clause_lower:
+                            compliance_issues.append({
+                                "statute": statute_name,
+                                "section": statute["section"],
+                                "issue": f"Ambiguity regarding {keyword} compliance.",
+                                "severity": "medium",
+                                "explanation": f"Ambiguous compliance with {statute_name} – may lead to interpretational disputes."
+                            })
+
+        # Merge all violations
+        all_violations = pattern_violations + statute_violations
+        high = len([v for v in all_violations if v.get("severity") == "high"])
+        medium = len([v for v in all_violations if v.get("severity") == "medium"])
+        risk_score = min((high * 0.4 + medium * 0.2), 1.0)
+
+        risk_level = "high" if risk_score >= 0.7 else "medium" if risk_score >= 0.3 else "low"
+
+        return {
+            "risk_level": risk_level,
+            "risk_score": round(risk_score, 2),
+            "violations": all_violations,
+            "compliance_issues": compliance_issues,
+            "legal_references": sorted(legal_references, key=lambda x: x["relevance_score"], reverse=True)[:5]
+        }
+
+    # -------------------------------------------------------------------------
+    def _analyze_pattern_violations(self, clause: str) -> List[Dict]:
+        """Check clause text for pattern-based violations."""
+        clause_lower = clause.lower()
+        found = []
+
+        for severity, patterns in self.risk_patterns.items():
+            for pattern in patterns:
+                if re.search(pattern["pattern"], clause_lower, re.IGNORECASE):
+                    found.append({
+                        "type": "pattern_violation",
+                        "severity": severity,
+                        "violation_description": pattern["explanation"],
+                        "statute_reference": pattern["statute_reference"],
+                        "explanation": pattern["explanation"]
+                    })
+        return found
 
     def _calculate_relevance(self, clause: str, keywords: List[str]) -> float:
-        """Calculate relevance score based on keyword matching and context"""
+        """Compute keyword relevance score."""
         clause_lower = clause.lower()
-        matches = sum(1 for keyword in keywords if keyword.lower() in clause_lower)
-        
-        total_keywords = len(keywords) if keywords else 1
-        base_score = matches / total_keywords
-        
-        # Boost score if important legal terms are present
-        important_terms = ['shall', 'must', 'required', 'obligated', 'compelled', 'notwithstanding']
-        important_matches = sum(1 for term in important_terms if term in clause_lower)
-        
-        return min(base_score + (important_matches * 0.1), 1.0)
+        score = sum(1 for k in keywords if k in clause_lower) / (len(keywords) or 1)
+        return min(score + (0.1 if "shall" in clause_lower else 0), 1.0)
 
-    def generate_dynamic_recommendations(self, clause: str, risk_analysis: Dict, legal_refs: List[Dict]) -> List[str]:
-        """Generate dynamic, context-specific recommendations based on the actual clause content"""
-        recommendations = []
-        
-        # Generate specific recommendations based on detected violations
-        for violation in risk_analysis['violations']:
-            if violation.get('type') == 'pattern_violation':
-                recommendations.append(f"⚠️ CRITICAL: {violation['violation_description']}")
-                recommendations.append(f"   - Legal Reference: {violation['statute_reference']}")
-                recommendations.append(f"   - Action: This clause should be revised to comply with legal requirements.")
-            else:
-                recommendations.append(f"⚠️ CRITICAL: {violation['violation_description']}")
-                recommendations.append(f"   - Explanation: {violation['explanation']}")
-        
-        # Generate compliance recommendations
-        for issue in risk_analysis['compliance_issues']:
-            recommendations.append(f"⚠️ REVIEW: {issue['issue']}")
-            recommendations.append(f"   - Explanation: {issue['explanation']}")
-        
-        # Generate general recommendations based on clause type
-        type_specific_recommendations = self._get_clause_type_specific_recommendations(
-            risk_analysis['violations'], 
-            risk_analysis['compliance_issues'],
-            risk_analysis.get('pattern_violations', [])
-        )
-        recommendations.extend(type_specific_recommendations)
-        
-        # Add general legal best practices
-        recommendations.extend([
-            "• Have this clause reviewed by a qualified legal professional",
-            "• Ensure all terms are clearly defined and unambiguous",
-            "• Verify that the clause aligns with current Indian legal requirements",
-            "• Consider including specific legal references to relevant statutes",
-            "• Ensure mutual consent and fairness in all contractual terms"
-        ])
-        
-        return recommendations
+    # -------------------------------------------------------------------------
+    def generate_dynamic_recommendations(
+        self, clause: str, risk_data: Dict, legal_refs: List[Dict]
+    ) -> List[str]:
+        """Generate detailed, context-aware recommendations per clause."""
+        recs = []
+        c = clause.lower()
 
-    def _get_clause_type_specific_recommendations(self, violations: List[Dict], compliance_issues: List[Dict], pattern_violations: List[Dict]) -> List[str]:
-        """Generate clause-type-specific recommendations"""
-        recommendations = []
-        
-        # Check for specific pattern violations to generate targeted advice
-        high_risk_patterns = [v for v in pattern_violations if v['severity'] == 'high']
-        medium_risk_patterns = [v for v in pattern_violations if v['severity'] == 'medium']
-        
-        for violation in high_risk_patterns:
-            if 'unlimited liability' in violation['explanation'].lower():
-                recommendations.append("• Consider capping liability to a reasonable amount to protect against excessive claims")
-            elif 'forfeit deposit' in violation['explanation'].lower():
-                recommendations.append("• Ensure deposit forfeiture has proper justification and follows local tenancy laws")
-            elif 'non-compete' in violation['explanation'].lower():
-                recommendations.append("• Limit non-compete period to maximum 2-3 years and specify geographic scope")
-        
-        for violation in medium_risk_patterns:
-            if 'reasonable time' in violation['explanation'].lower():
-                recommendations.append("• Define specific timeframes instead of using ambiguous terms like 'reasonable time'")
-            elif 'subject to change' in violation['explanation'].lower():
-                recommendations.append("• Specify notice period and approval process for any changes")
-        
-        # Check for compliance issues
-        for issue in compliance_issues:
-            if 'ambiguous' in issue['explanation'].lower():
-                recommendations.append("• Clarify ambiguous terms with specific definitions and measurable criteria")
-        
-        return recommendations
+        # Clause-based insights
+        if "pledge" in c or "collateral" in c:
+            recs.append("Ensure pledged security is clearly identified and not transferred without consent.")
+        if "penalty" in c:
+            recs.append("Check if the penalty percentage is reasonable and proportionate to breach.")
+        if "termination" in c and "notice" not in c:
+            recs.append("Add a defined notice period before termination to avoid sudden enforcement.")
+        if "indemnify" in c:
+            recs.append("Limit indemnity scope to direct losses only, not consequential damages.")
+        if "without objection" in c or "demur" in c:
+            recs.append("Avoid 'without demur' phrasing — replace with 'subject to valid objections'.")
+        if "loan" in c and "interest" in c and "%" not in c:
+            recs.append("Specify exact interest rate and payment frequency to avoid ambiguity.")
+        if not recs:
+            recs.append("Clause appears compliant under Indian Contract Act norms.")
 
-    def generate_dynamic_summary(self, text: str, clause_type: str) -> str:
-        """Generate a dynamic summary that adapts to the clause type and content"""
-        # Use the enhanced summarization from IndianLegalBERT
-        from .indian_legal_bert import IndianLegalBERT
-        
-        # Create a temporary instance to use the summarization method
-        temp_bert = IndianLegalBERT()
-        summary = temp_bert.generate_dynamic_summary(text)
-        
-        # Enhance the summary based on clause type
-        if clause_type == 'rental':
-            summary += " This rental agreement clause defines tenant and landlord obligations regarding rent, security deposits, and property usage."
-        elif clause_type == 'employment':
-            summary += " This employment clause outlines worker responsibilities, compensation terms, and termination conditions."
-        elif clause_type == 'divorce':
-            summary += " This clause addresses maintenance, custody, and property division in divorce proceedings."
-        elif clause_type == 'property':
-            summary += " This property clause covers ownership rights, transfer procedures, and registration requirements."
-        
-        return summary
+        # Add high-risk violations with fix actions
+        for v in risk_data.get("violations", []):
+            if v["severity"] == "high":
+                recs.append(f"⚠️ Critical: {v['violation_description']}")
+                recs.append(f"   - Reference: {v['statute_reference']}")
+
+        # Medium issues → contextual fix
+        for v in risk_data.get("compliance_issues", []):
+            recs.append(f"⚠️ Review: {v['issue']}")
+            recs.append(f"   - Suggestion: Clarify or define ambiguous terms explicitly.")
+
+        # Add relevant laws
+        top_laws = [r["statute"] for r in legal_refs[:2]]
+        if top_laws:
+            recs.append(f"📘 Relevant Indian Laws: {', '.join(top_laws)}")
+
+        return recs
+    
+    def get_legal_references(self, clause: str, clause_type: str) -> List[Dict]:
+        """Return the most relevant legal statutes and sections for a clause."""
+        legal_refs = []
+        clause_lower = clause.lower()
+
+        # Search through loaded statute cache
+        for statute_name, statute_info in self.statute_cache.items():
+            relevance = self._calculate_relevance(clause, statute_info["keywords"])
+            if relevance > 0:
+                legal_refs.append({
+                    "statute": statute_name,
+                    "section": statute_info["section"],
+                    "description": statute_info["description"],
+                    "relevance_score": relevance,
+                    "matched_keywords": [
+                        kw for kw in statute_info["keywords"] if kw.lower() in clause_lower
+                    ]
+                })
+
+        # Add clause-type-based fallback using IndianLegalBERT law mapping
+        from ai_models.indian_legal_bert import IndianLegalBERT
+        bert = IndianLegalBERT()
+        law_name = bert.get_relevant_law(clause_type)
+
+        # If nothing found via statute cache, still include this default
+        if not legal_refs:
+            legal_refs.append({
+                "statute": law_name,
+                "section": "—",
+                "description": f"Relevant under {law_name}",
+                "relevance_score": 0.5,
+                "matched_keywords": []
+            })
+
+        # Sort descending by relevance
+        legal_refs.sort(key=lambda x: x["relevance_score"], reverse=True)
+
+        # Return top 3 for clarity
+        return legal_refs[:3]
+

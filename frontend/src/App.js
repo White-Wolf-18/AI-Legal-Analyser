@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { login, uploadFile, analyzeText, analyzeStored } from "./api";
-import "./App.css"; // ✅ Import your new CSS
+import "./App.css";
 
 function App() {
   const [email, setEmail] = useState("");
@@ -38,20 +38,6 @@ function App() {
     }
   }
 
-  async function handleAnalyzeText(e) {
-    e.preventDefault();
-    if (!text) return setError("Enter text to analyze");
-    setLoading(true);
-    try {
-      const res = await analyzeText(text, token);
-      setResults(res.data);
-    } catch (err) {
-      setError(err?.response?.data?.detail || "Analyze failed");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function handleAnalyzeStored(e) {
     e.preventDefault();
     if (!storedFilename) return setError("No uploaded file stored");
@@ -71,26 +57,22 @@ function App() {
   // -------------------------------
   if (!token) {
     return (
-      <div className="container-custom">
-        <h2>🔐 Legal AI Analyzer — Login</h2>
+      <div className="container-custom login-page">
+        <h2>🔐 LegalAI — Login</h2>
         <form onSubmit={handleLogin} className="section-box">
-          <div className="mb-3">
-            <label>Email</label>
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
-            />
-          </div>
-          <div className="mb-3">
-            <label>Password</label>
-            <input
-              type="password"
-              value={password}
-              placeholder="Enter password"
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
+          <label>Email</label>
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Enter your email"
+          />
+          <label>Password</label>
+          <input
+            type="password"
+            value={password}
+            placeholder="Enter password"
+            onChange={(e) => setPassword(e.target.value)}
+          />
           <button className="btn-primary" type="submit">
             Login
           </button>
@@ -105,10 +87,20 @@ function App() {
   // -------------------------------
   return (
     <div className="container-custom">
-      <h2>⚖️ Legal AI Document Analyzer</h2>
-      <p>
-        Logged in as: <b>{email}</b>
+      <header className="app-header">
+  <div className="header-left">
+    <div className="title-block">
+      <h2>⚖️ LegalAI Assistant</h2>
+      <p className="subtitle">
+        Ready to analyze your contracts using Indian Legal standards.
       </p>
+    </div>
+  </div>
+  <div className="user-info">
+    <b>{email}</b>
+  </div>
+</header>
+
 
       {/* Upload Section */}
       <section className="section-box">
@@ -140,82 +132,87 @@ function App() {
         </button>
       </section>
 
-      {/* Text Analysis */}
-      <section className="section-box">
-        <h4>✍️ Analyze Pasted Text</h4>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={8}
-          placeholder="Paste your contract or legal text here..."
-        />
-        <button
-          className="btn-primary"
-          onClick={handleAnalyzeText}
-          disabled={loading || !text}
-        >
-          Analyze Text
-        </button>
-      </section>
-
-      {/* Status */}
-      {loading && <div className="alert alert-info">⏳ Working…</div>}
+      {loading && <div className="alert alert-info">⏳ Analyzing your document…</div>}
       {error && <div className="alert alert-danger">{error}</div>}
 
-      {/* Results */}
+      {/* === RESULTS === */}
       {results && (
         <section className="result-card">
-          <h3>📊 Analysis Results</h3>
-
-          <h4>📝 Summary</h4>
-          <p style={{ whiteSpace: "pre-wrap" }}>{results.summary}</p>
-
-          <h4>⚖️ Overall Risk</h4>
-          <p>
-            <b>Level:</b>{" "}
-            <span
-              className={
-                results.overall_risk_level === "High"
-                  ? "risk-high"
+          {/* RISK OVERVIEW */}
+          <div className="risk-panel">
+            <div className="risk-header">
+              <h3>
+                {results.overall_risk_level === "High"
+                  ? "🚨 High Risk"
                   : results.overall_risk_level === "Medium"
-                  ? "risk-medium"
-                  : "risk-low"
-              }
-            >
-              {results.overall_risk_level}
-            </span>{" "}
-            ({Math.round(results.overall_risk_score * 100)}%)
-          </p>
-
-          <div className="progress">
-            <div
-              className={`progress-bar ${
-                results.overall_risk_level.toLowerCase()
-              }`}
-              style={{ width: `${results.overall_risk_score * 100}%` }}
-            ></div>
+                  ? "⚠️ Medium Risk"
+                  : "✅ Low Risk"}
+              </h3>
+              <span className="risk-score">
+                {Math.round(results.overall_risk_score * 100)}/100
+              </span>
+            </div>
+            <div className="risk-bar">
+              <div
+                className={`risk-fill ${results.overall_risk_level.toLowerCase()}`}
+                style={{ width: `${results.overall_risk_score * 100}%` }}
+              ></div>
+            </div>
+            <p className="risk-caption">
+              {results.overall_risk_level === "High"
+                ? "Several problematic clauses detected. Strongly consider changes."
+                : results.overall_risk_level === "Medium"
+                ? "Some clauses may pose moderate risk."
+                : "Minimal legal risk detected. Document appears compliant."}
+            </p>
           </div>
 
-          {results.detected_risks?.length > 0 && (
-            <>
-              <h4>🚨 Detected Risk Indicators</h4>
-              <ul>
-                {results.detected_risks.map((risk, i) => (
-                  <li key={i}>{risk}</li>
-                ))}
-              </ul>
-            </>
+          {/* Summary */}
+          <div className="result-block">
+            <h4>📝 Summary</h4>
+            <p style={{ whiteSpace: "pre-wrap" }}>{results.summary}</p>
+          </div>
+
+          {/* Risky Clauses */}
+          {results.risky_clauses?.length > 0 && (
+            <div className="result-block">
+              <h4>⚠️ Top Risky Clauses</h4>
+              {results.risky_clauses.map((c, i) => (
+                <div key={i} className="clause-card">
+                  <strong>
+                    {i + 1}. {c.clause_type.toUpperCase()}
+                  </strong>{" "}
+                  —{" "}
+                  <span
+                    className={
+                      c.risk_level === "high"
+                        ? "risk-high"
+                        : c.risk_level === "medium"
+                        ? "risk-medium"
+                        : "risk-low"
+                    }
+                  >
+                    {c.risk_level.toUpperCase()}
+                  </span>{" "}
+                  ({Math.round(c.risk_score * 100)}%)
+                  <p style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
+                    {c.summary}
+                  </p>
+                </div>
+              ))}
+            </div>
           )}
 
+          {/* Recommendations */}
           {results.recommendations?.length > 0 && (
-            <>
-              <h4>🛠️ Recommendations</h4>
+            <div className="result-block">
+              <h4>💡 Recommendations</h4>
               <ul>
                 {results.recommendations.map((rec, i) => (
                   <li key={i}>{rec}</li>
                 ))}
               </ul>
-            </>
+            </div>
           )}
         </section>
       )}

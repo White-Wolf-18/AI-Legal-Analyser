@@ -1,15 +1,15 @@
+# backend/main.py
 import os
 import io
 import json
 import hashlib
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from jose import jwt, JWTError
 from pydantic import BaseModel
+from jose import jwt, JWTError
 
 import fitz  # PyMuPDF
 import docx
@@ -18,12 +18,12 @@ from Crypto.Random import get_random_bytes
 from base64 import b64encode, b64decode
 from dotenv import load_dotenv
 
-# ---------------- AI Models ----------------
+# AI model modules (you must have these files available under ai_models/)
 from ai_models.indian_legal_bert import IndianLegalBERT
 from ai_models.risk_engine import AdvancedRiskEngine
 from utils.file_processor import FileProcessor
 
-# ---------- Load ENV ----------
+# ---------- Load env ----------
 load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
@@ -35,14 +35,29 @@ AES_KEY_B64 = os.getenv("AES_KEY_B64")
 SINGLE_USER_EMAIL = os.getenv("SINGLE_USER_EMAIL", "admin@example.com")
 SINGLE_USER_PASSWORD = os.getenv("SINGLE_USER_PASSWORD", "changeme")
 
-print(f"[DEBUG] Loaded Email: {SINGLE_USER_EMAIL}")
-print(f"[DEBUG] Loaded Password: {SINGLE_USER_PASSWORD}")
-
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# ---------- Initialize AI Models ----------
-legal_bert = IndianLegalBERT()
-risk_engine = AdvancedRiskEngine(db_session=None)
+print(f"[DEBUG] SINGLE_USER_EMAIL={SINGLE_USER_EMAIL}")
+
+# ---------- Model initialization (defensive) ----------
+legal_bert = None
+risk_engine = None
+try:
+    legal_bert = IndianLegalBERT()
+    # pass None for db_session if you don't have a DB yet; AdvancedRiskEngine handles it
+    risk_engine = AdvancedRiskEngine(db_session=None)
+    print("[DEBUG] AI models initialized.")
+except Exception as e:
+    # don't crash at import time; provide clear message
+    print("[WARN] Failed to initialize AI models at startup:", str(e))
+    # Create placeholders that raise helpful errors when called
+    class _BrokenModel:
+        def __getattr__(self, name):
+            def _boom(*a, **k):
+                raise RuntimeError(f"Model not available: attempted to call {name}. Original error: {e}")
+            return _boom
+    legal_bert = _BrokenModel()
+    risk_engine = _BrokenModel()
 
 # ---------- FastAPI ----------
 app = FastAPI(title="Legal AI Document Analyzer")
@@ -55,7 +70,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------- Auth Models ----------
+# ---------- Auth models ----------
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -64,7 +79,7 @@ class LoginRequest(BaseModel):
     email: str
     password: str
 
-# ---------- AES Helpers ----------
+# ---------- AES helpers ----------
 def _ensure_aes_key() -> bytes:
     if AES_KEY_B64:
         try:
@@ -74,6 +89,7 @@ def _ensure_aes_key() -> bytes:
             return key
         except Exception as e:
             raise RuntimeError(f"Invalid AES_KEY_B64: {e}")
+    # fallback insecure key (dev only)
     return hashlib.sha256(SECRET_KEY.encode()).digest()[:32]
 
 AES_KEY = _ensure_aes_key()
@@ -99,10 +115,13 @@ def decrypt_bytes(b64str: str) -> bytes:
     pt = cipher.decrypt(ct)
     return _unpad(pt)
 
-# ---------- JWT Helpers ----------
+# ---------- JWT helpers ----------
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -120,12 +139,37 @@ async def get_current_user(request: Request):
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-# ---------- Health Check ----------
+# ---------- Local byte-based extractors (used when reading encrypted stored files) ----------
+def extract_text_from_pdf_bytes(b: bytes) -> str:
+    try:
+        text = []
+        with fitz.open(stream=b, filetype="pdf") as doc:
+            for page in doc:
+                text.append(page.get_text("text"))
+        return "\n".join(text)
+    except Exception:
+        # return best-effort decode
+        try:
+            return b.decode("utf-8", errors="replace")
+        except Exception:
+            return ""
+
+def extract_text_from_docx_bytes(b: bytes) -> str:
+    try:
+        # python-docx expects a file-like object
+        doc = docx.Document(io.BytesIO(b))
+        return "\n".join([p.text for p in doc.paragraphs])
+    except Exception:
+        try:
+            return b.decode("utf-8", errors="replace")
+        except Exception:
+            return ""
+
+# ---------- Routes ----------
 @app.get("/health")
 def health():
     return {"status": "ok", "time": datetime.utcnow().isoformat()}
 
-# ---------- Login ----------
 @app.post("/login", response_model=Token)
 def login(body: LoginRequest):
     print(f"[DEBUG] Login attempt: {body.email}")
@@ -134,7 +178,6 @@ def login(body: LoginRequest):
     access_token = create_access_token(data={"sub": body.email})
     return {"access_token": access_token, "token_type": "bearer"}
 
-# ---------- File Upload ----------
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...), user=Depends(get_current_user)):
     fname = file.filename
@@ -154,77 +197,200 @@ async def upload_file(file: UploadFile = File(...), user=Depends(get_current_use
 
     return {"stored_filename": out_name}
 
-# ---------- File Text Extraction ----------
-def extract_text_from_pdf_bytes(b: bytes) -> str:
-    text = []
-    with fitz.open(stream=b, filetype="pdf") as doc:
-        for page in doc:
-            text.append(page.get_text("text"))
-    return "\n".join(text)
-
-def extract_text_from_docx_bytes(b: bytes) -> str:
-    doc = docx.Document(io.BytesIO(b))
-    return "\n".join([p.text for p in doc.paragraphs])
-
-# ---------- Document Analysis ----------
 @app.post("/analyze")
 async def analyze_document(payload: dict, user=Depends(get_current_user)):
-    try:
-        text = payload.get("text")
-        stored_filename = payload.get("stored_filename")
+    """
+    payload expected:
+      - text: optional raw text to analyze
+      - stored_filename: optional stored encrypted filename (use upload endpoint first)
+    """
+    text = payload.get("text")
+    stored_filename = payload.get("stored_filename")
 
-        if not text and stored_filename:
-            path = os.path.join(UPLOAD_DIR, stored_filename)
-            if not os.path.exists(path):
-                raise HTTPException(status_code=404, detail="File not found")
-            enc = open(path, "r", encoding="utf-8").read()
+    # Step 1: If stored file provided, decrypt and extract text
+    if not text and stored_filename:
+        path = os.path.join(UPLOAD_DIR, stored_filename)
+        if not os.path.exists(path):
+            raise HTTPException(status_code=404, detail="stored file not found")
+        enc = open(path, "r", encoding="utf-8").read()
+        try:
             raw = decrypt_bytes(enc)
-            if path.lower().endswith(".docx.enc"):
-                text = extract_text_from_docx_bytes(raw)
-            else:
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to decrypt stored file: {e}")
+
+        # Determine extension from original filename inside stored_filename
+        lower = path.lower()
+        if lower.endswith(".docx.enc"):
+            text = extract_text_from_docx_bytes(raw)
+        elif lower.endswith(".pdf.enc") or lower.endswith(".enc"):
+            # try pdf first, fallback to docx
+            try:
                 text = extract_text_from_pdf_bytes(raw)
+            except Exception:
+                text = extract_text_from_docx_bytes(raw)
+        else:
+            # best effort
+            text = extract_text_from_pdf_bytes(raw) or extract_text_from_docx_bytes(raw) or raw.decode("utf-8", errors="replace")
 
-        if not text:
-            raise HTTPException(status_code=400, detail="Text or stored_filename required")
+    if not text:
+        raise HTTPException(status_code=400, detail="text or stored_filename required")
 
-        # ----------- Analysis using new models -----------
+    # Step 2: segmentation (use FileProcessor.preprocess_text if available)
+    try:
         clauses = FileProcessor.preprocess_text(text)
-        results = []
-        total_risk = 0
+    except Exception:
+        # fallback to paragraph split
+        clauses = [c.strip() for c in text.split("\n\n") if c.strip()]
 
-        for clause in clauses[:50]:  # Limit to first 50 clauses for performance
+    if not clauses:
+        clauses = [text]
+
+    results: List[Dict[str, Any]] = []
+    total_risk = 0.0
+
+    # Step 3: Analyze first N clauses
+    MAX_CLAUSES = 50
+    for clause in clauses[:MAX_CLAUSES]:
+        # predict clause type + confidence
+        try:
             clause_type, confidence = legal_bert.predict_clause_type(clause)
+        except Exception as e:
+            clause_type, confidence = "general", 0.0
+
+        # risk analysis (AdvancedRiskEngine)
+        try:
             risk_data = risk_engine.analyze_risk_with_statutes(clause, clause_type)
+        except Exception as e:
+            # fail-safe structure
+            risk_data = {
+                "risk_level": "low",
+                "risk_score": 0.0,
+                "violations": [],
+                "compliance_issues": [],
+                "legal_references": [],
+                "statute_references": [],
+                "pattern_violations": []
+            }
+
+        # legal references (if provided)
+        try:
             legal_refs = risk_engine.get_legal_references(clause, clause_type)
+        except Exception:
+            legal_refs = []
+
+        # clause summary
+        try:
             summary = legal_bert.generate_dynamic_summary(clause)
+        except Exception:
+            summary = (clause[:250] + "...") if len(clause) > 250 else clause
+
+        # recommendations
+        try:
             recommendations = risk_engine.generate_dynamic_recommendations(clause, risk_data, legal_refs)
+        except Exception:
+            recommendations = ["Review clause carefully; automated recommendations unavailable."]
 
-            results.append({
-                "clause_text": clause[:600],
-                "clause_type": clause_type,
-                "risk_level": risk_data["risk_level"],
-                "risk_score": risk_data["risk_score"],
-                "confidence": confidence,
-                "summary": summary,
-                "recommendations": recommendations,
-            })
-            total_risk += risk_data["risk_score"]
+        results.append({
+            "clause_text": clause[:1000],
+            "clause_type": clause_type,
+            "confidence": confidence,
+            "risk_level": risk_data.get("risk_level", "low"),
+            "risk_score": float(risk_data.get("risk_score", 0.0)),
+            "summary": summary,
+            "violations": risk_data.get("violations", []),
+            "recommendations": recommendations,
+            "legal_references": legal_refs
+        })
 
-        # ----------- Aggregate Results -----------
-        document_summary = legal_bert.generate_dynamic_summary(text)
-        avg_risk = total_risk / len(results) if results else 0
-        high = sum(1 for r in results if r["risk_level"] == "high")
-        medium = sum(1 for r in results if r["risk_level"] == "medium")
-        low = sum(1 for r in results if r["risk_level"] == "low")
+        total_risk += float(risk_data.get("risk_score", 0.0))
 
-        return {
-            "summary": document_summary,
-            "overall_risk_score": avg_risk,
-            "overall_risk_level": "High" if avg_risk >= 0.7 else "Medium" if avg_risk >= 0.3 else "Low",
-            "risk_distribution": {"high": high, "medium": medium, "low": low},
-            "clauses_analyzed": len(results),
-            "detailed_analysis": results,
-            "recommendations": list({rec for r in results for rec in r["recommendations"]})[:15],
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+    # Step 4: Document-level aggregation
+    avg_risk = (total_risk / len(results)) if results else 0.0
+    overall_risk_level = "High" if avg_risk >= 0.7 else ("Medium" if avg_risk >= 0.3 else "Low")
+
+    # document summary (try full-document summary; fall back to concatenating clause summaries)
+    try:
+        document_summary = legal_bert.generate_dynamic_summary(text, max_length=150)
+    except Exception:
+        # fallback: join top clause summaries
+        document_summary = " ".join([r["summary"] for r in results[:5]])
+
+    # build detailed_summary string similar to your example
+    # --- Filter & report top risky clauses ---
+    # --- Filter & report top risky clauses ---
+    # === Step 5: Generate filtered risky clauses and summaries ===
+    RISK_THRESHOLD = 0.2  # 20%
+
+    # Sort all clause results by risk score (highest first)
+    top_sorted = sorted(results, key=lambda x: x["risk_score"], reverse=True)
+    risky_clauses = [r for r in top_sorted if r["risk_score"] >= RISK_THRESHOLD]
+
+    # === CASE 1: No risky clauses ===
+    if not risky_clauses:
+        detailed_summary = (
+            "✅ No significant risks detected.\n"
+            "All clauses in this document have risk scores below 20%.\n"
+            "The document appears legally safe and compliant.\n"
+        )
+    else:
+        # === CASE 2: Risky clauses exist → Hide detailed summary completely ===
+        detailed_summary = ""
+
+    # --- Build Recommendations section dynamically ---
+    recommendations = []
+    for r in risky_clauses:
+        recs = r.get("recommendations", [])
+        laws = [ref["statute"] for ref in r.get("legal_references", [])]
+
+        # Include recommendations
+        recommendations.extend(recs)
+        if laws:
+            recommendations.append(f"📘 Relevant Indian Laws: {', '.join(laws)}")
+
+    # Fallback if there are no risky clauses
+    if not recommendations:
+        recommendations = [
+            "✅ No significant risks detected.",
+            "The document appears legally compliant and safe."
+        ]
+
+    # --- Deduplicate and trim recommendations ---
+    all_recs = []
+    for rec in recommendations:
+        if rec not in all_recs:
+            all_recs.append(rec)
+    all_recs = all_recs[:20]
+
+    # --- Create a readable “Top Risky Clauses” summary (for frontend display) ---
+    risky_summary = ""
+    if risky_clauses:
+        risky_summary += "⚠️ Top Risky Clauses\n(Only clauses with risk ≥ 20% are shown)\n\n"
+        for idx, r in enumerate(risky_clauses[:5], 1):
+            risk_percent = round(r.get("risk_score", 0) * 100)
+            risky_summary += (
+                f"{idx}. {r.get('clause_type', 'Unknown').upper()} — "
+                f"{r.get('risk_level', 'Unknown').upper()} ({risk_percent}%)\n"
+                f"{r.get('summary')}\n\n"
+            )
+
+    # --- Collect detected risk clause types (for quick frontend list) ---
+    detected_risks = [r["clause_type"] for r in results]
+
+    # --- Final API Response (matches your frontend expectations) ---
+    return {
+        "summary": document_summary,
+        "overall_risk_score": avg_risk,
+        "overall_risk_level": overall_risk_level,
+        "detailed_summary": detailed_summary,        # hidden if risky clauses exist
+        "risky_clauses": risky_clauses[:5],
+        "risky_summary": risky_summary,              # added summary of top risky clauses
+        "detected_risks": detected_risks,
+        "recommendations": all_recs,
+        "count": len(results),
+        "message": (
+            "⚠️ High-risk clauses detected above 20%."
+            if risky_clauses
+            else "✅ No significant risks found. The document appears safe."
+        ),
+    }
+
