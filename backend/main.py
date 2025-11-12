@@ -336,16 +336,51 @@ async def analyze_document(payload: dict, user=Depends(get_current_user)):
         # === CASE 2: Risky clauses exist → Hide detailed summary completely ===
         detailed_summary = ""
 
-    # --- Build Recommendations section dynamically ---
+    # --- Build Recommendations and Legal References ---
     recommendations = []
-    for r in risky_clauses:
-        recs = r.get("recommendations", [])
-        laws = [ref["statute"] for ref in r.get("legal_references", [])]
+    legal_refs_set = set()  # To remove duplicates
 
-        # Include recommendations
+    for r in risky_clauses:
+        # Collect recommendations
+        recs = r.get("recommendations", [])
         recommendations.extend(recs)
-        if laws:
-            recommendations.append(f"📘 Relevant Indian Laws: {', '.join(laws)}")
+
+        # Collect unique law names
+        for ref in r.get("legal_references", []):
+            statute = ref.get("statute")
+            section = ref.get("section")
+            if statute:
+                if section and section not in statute:
+                    legal_refs_set.add(f"{statute} – {section}")
+                else:
+                    legal_refs_set.add(statute)
+
+
+    # --- Remove legal references from recommendations ---
+    recommendations = [
+        rec for rec in recommendations
+        if not rec.strip().startswith(("📘", "Reference:", "- Reference:"))
+    ]
+
+
+    # --- Deduplicate and clean ---
+    cleaned_recommendations = []
+    for rec in recommendations:
+        rec = rec.strip()
+        if rec and rec not in cleaned_recommendations:
+            cleaned_recommendations.append(rec)
+    recommendations = cleaned_recommendations
+
+    # --- Handle case: no risky clauses ---
+    if not recommendations:
+        recommendations = [
+            "✅ No significant risks detected.",
+            "The document appears legally compliant and safe."
+        ]
+
+    # --- Convert unique laws set into sorted list ---
+    relevant_laws = sorted(list(legal_refs_set))
+
 
     # Fallback if there are no risky clauses
     if not recommendations:
@@ -386,6 +421,7 @@ async def analyze_document(payload: dict, user=Depends(get_current_user)):
         "risky_summary": risky_summary,              # added summary of top risky clauses
         "detected_risks": detected_risks,
         "recommendations": all_recs,
+        "relevant_laws": relevant_laws,
         "count": len(results),
         "message": (
             "⚠️ High-risk clauses detected above 20%."

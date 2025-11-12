@@ -39,48 +39,96 @@ function App() {
   }
 
   async function handleAnalyzeStored(e) {
-    e.preventDefault();
-    if (!storedFilename) return setError("No uploaded file stored");
-    setLoading(true);
-    try {
-      const res = await analyzeStored(storedFilename, token);
-      setResults(res.data);
-    } catch (err) {
-      setError(err?.response?.data?.detail || "Analyze failed");
-    } finally {
-      setLoading(false);
-    }
+  e.preventDefault();
+  if (!storedFilename) return setError("No uploaded file stored");
+
+  // Clear previous results before analyzing new file
+  setResults(null);
+  await new Promise((resolve) => setTimeout(resolve, 150)); // brief UX delay
+  setResults(null);
+  setError(null);
+  setLoading(true);
+
+  try {
+    const res = await analyzeStored(storedFilename, token);
+    setResults(res.data);
+  } catch (err) {
+    setError(err?.response?.data?.detail || "Analyze failed");
+  } finally {
+    setLoading(false);
   }
+}
+
+async function handleAnalyzeText(e) {
+  e.preventDefault();
+  if (!text) return setError("Enter text to analyze");
+
+  // Clear previous results before analyzing new text
+  setResults(null);
+  setError(null);
+  setLoading(true);
+
+  try {
+    const res = await analyzeText(text, token);
+    setResults(res.data);
+  } catch (err) {
+    setError(err?.response?.data?.detail || "Analyze failed");
+  } finally {
+    setLoading(false);
+  }
+}
+
 
   // -------------------------------
-  // LOGIN SCREEN
-  // -------------------------------
-  if (!token) {
-    return (
-      <div className="container-custom login-page">
-        <h2>🔐 LegalAI — Login</h2>
-        <form onSubmit={handleLogin} className="section-box">
-          <label>Email</label>
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Enter your email"
-          />
-          <label>Password</label>
-          <input
-            type="password"
-            value={password}
-            placeholder="Enter password"
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <button className="btn-primary" type="submit">
-            Login
+// LOGIN SCREEN
+// -------------------------------
+if (!token) {
+  return (
+    <div className="login-page">
+      <div className="login-card">
+        <div className="login-header">
+          <h1>⚖️ LegalAI Assistant</h1>
+          <p>Sign in to analyze your contracts using Indian Legal standards.</p>
+        </div>
+
+        <form onSubmit={handleLogin}>
+          <div className="form-group">
+            <label>Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your email"
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter password"
+              required
+            />
+          </div>
+
+          <button type="submit" className="btn-login" disabled={loading}>
+            {loading ? "Logging in..." : "Login"}
           </button>
-          {error && <div className="alert alert-danger">{error}</div>}
+
+          {error && <div className="alert-login">{error}</div>}
         </form>
+
+        <div className="login-footer">
+          <p>🔒 Your data remains private and secure.</p>
+        </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
+
 
   // -------------------------------
   // MAIN APP
@@ -214,6 +262,18 @@ function App() {
               </ul>
             </div>
           )}
+          {/* 📘 Relevant Indian Laws */}
+{results.relevant_laws && results.relevant_laws.length > 0 && (
+  <div className="result-block">
+    <h4>📘 Relevant Indian Laws</h4>
+    <ul>
+      {results.relevant_laws.map((law, i) => (
+        <li key={i}>{law}</li>
+      ))}
+    </ul>
+  </div>
+)}
+
         </section>
       )}
     </div>
