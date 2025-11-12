@@ -1,0 +1,32 @@
+version: "3.8"
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./backend:/app/backend:cached
+      - ./uploads:/app/uploads
+      - ./models:/app/models
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - AES_KEY_B64=${AES_KEY_B64}
+      - SINGLE_USER_EMAIL=${SINGLE_USER_EMAIL}
+      - SINGLE_USER_PASSWORD=${SINGLE_USER_PASSWORD}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - MODEL_CLASSIFIER=${MODEL_CLASSIFIER}
+      - MODEL_SUMMARIZER=${MODEL_SUMMARIZER}
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    volumes:
+      - ./frontend:/usr/src/app
+    environment:
+      - REACT_APP_BACKEND_URL=${FRONTEND_URL}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped

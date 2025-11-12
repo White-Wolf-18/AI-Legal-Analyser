@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.env
+.env.*
+.vscode/
+.idea/
+*.log
+
+# Model weights / caches
+models/
+transformers_cache/
+hf_cache/
+cache/
+
+# Uploaded encrypted files and secrets
+uploads/
+*.enc
+firebase_private_key.json
+*.pem
+*.key

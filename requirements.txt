@@ -1,0 +1,2 @@
+# Root requirements for convenience (referenced by Docker builds if needed)
+-r backend/requirements.txt
