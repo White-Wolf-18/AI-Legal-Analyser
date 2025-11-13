@@ -618,7 +618,7 @@ code {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
 
-/* === LOGIN BUTTON === */
+/* === LOGIN BUTTON === */ /*Added this after getting the input that the login button should look more nice*/
 .btn-login {
   width: 100%;
   background: linear-gradient(90deg, #2563eb, #1d4ed8);

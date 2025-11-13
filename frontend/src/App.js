@@ -266,7 +266,7 @@ if (!token) {
             {highlightViolations(c.clause_text, c.violations)}
           </p>
 
-          {/* === IMPROVED VERSION === */}
+          {/* === IMPROVED VERSION === */} 
           <h5 className="subheading improved-title">✨ Improved Version (Legally Safer)</h5>
 
           {c.improved_clause ? (
