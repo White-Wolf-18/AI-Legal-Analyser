@@ -2,6 +2,26 @@ import React, { useState } from "react";
 import { login, uploadFile, analyzeText, analyzeStored } from "./api";
 import "./App.css";
 
+
+function highlightViolations(text, violations = []) {
+  if (!violations || violations.length === 0) return text;
+
+  let highlighted = text;
+  violations.forEach(v => {
+    if (!v.match_text) return;
+
+    const safe = v.match_text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(safe, "gi");
+
+    highlighted = highlighted.replace(
+      regex,
+      match => `<mark class="highlight">${match}</mark>`
+    );
+  });
+
+  return <span dangerouslySetInnerHTML={{ __html: highlighted }} />;
+}
+
 function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -221,35 +241,59 @@ if (!token) {
             <p style={{ whiteSpace: "pre-wrap" }}>{results.summary}</p>
           </div>
 
-          {/* Risky Clauses */}
-          {results.risky_clauses?.length > 0 && (
-            <div className="result-block">
-              <h4>⚠️ Top Risky Clauses</h4>
-              {results.risky_clauses.map((c, i) => (
-                <div key={i} className="clause-card">
-                  <strong>
-                    {i + 1}. {c.clause_type.toUpperCase()}
-                  </strong>{" "}
-                  —{" "}
-                  <span
-                    className={
-                      c.risk_level === "high"
-                        ? "risk-high"
-                        : c.risk_level === "medium"
-                        ? "risk-medium"
-                        : "risk-low"
-                    }
-                  >
-                    {c.risk_level.toUpperCase()}
-                  </span>{" "}
-                  ({Math.round(c.risk_score * 100)}%)
-                  <p style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
-                    {c.summary}
-                  </p>
-                </div>
-              ))}
+          {/* ⚠️ Top Risky Clauses */}
+{results.risky_clauses && results.risky_clauses.length > 0 && (
+  <div className="result-block">
+    <h4>⚠️ Top Risky Clauses</h4>
+
+    {results.risky_clauses.map((c, i) => {
+      const riskPercent = Math.round((c.risk_score || 0) * 100);
+
+      return (
+        <div key={i} className="clause-card">
+          
+          {/* Clause heading */}
+          <div className="clause-header">
+            <strong>{i + 1}. {c.clause_type.toUpperCase()}</strong>
+            <span className={`risk-badge ${c.risk_level.toLowerCase()}`}>
+              {c.risk_level.toUpperCase()} — {riskPercent}%
+            </span>
+          </div>
+
+          {/* === ORIGINAL CLAUSE WITH HIGHLIGHTING === */}
+          <h5 className="subheading">Original Clause</h5>
+          <p className="original-clause">
+            {highlightViolations(c.clause_text, c.violations)}
+          </p>
+
+          {/* === IMPROVED VERSION === */}
+          <h5 className="subheading improved-title">✨ Improved Version (Legally Safer)</h5>
+
+          {c.improved_clause ? (
+            <p className="improved-clause">{c.improved_clause}</p>
+          ) : (
+            <div className="alert alert-warning">
+              ⚠️ Auto-rewrite failed — showing manual suggestions instead.
             </div>
           )}
+
+          {/* === LEGAL REFERENCES === */}
+          {c.legal_references?.length > 0 && (
+            <ul className="law-list">
+              {c.legal_references.map((law, j) => (
+                <li key={j}>
+                  <b>{law.statute}</b> — {law.section}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      );
+    })}
+  </div>
+)}
+
+
 
           {/* Recommendations */}
           {results.recommendations?.length > 0 && (

@@ -693,3 +693,128 @@ code {
     transform: translateY(0);
   }
 }
+/* === ORIGINAL CLAUSE TEXT === */
+.original-clause {
+  background: #fff;
+  padding: 12px;
+  border-radius: 10px;
+  border-left: 4px solid #0d6efd;
+  margin-top: 10px;
+  margin-bottom: 14px;
+  font-size: 0.95rem;
+  color: #444;
+}
+
+/* === IMPROVED VERSION BOX === */
+.improved-box {
+  background: #f1f9ff;
+  border-left: 5px solid #0d6efd;
+  padding: 14px 16px;
+  border-radius: 12px;
+  margin-top: 10px;
+  margin-bottom: 15px;
+  box-shadow: 0 2px 8px rgba(13, 110, 253, 0.15);
+  transition: all 0.25s ease-in-out;
+}
+
+.improved-box:hover {
+  background: #e9f3ff;
+  border-left-color: #0056d6;
+}
+
+.improved-box h5 {
+  margin: 0 0 8px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0d47a1;
+}
+
+/* === LAWS LIST === */
+.law-list {
+  margin-top: 10px;
+  padding-left: 20px;
+}
+
+.law-list li {
+  font-size: 0.9rem;
+  color: #333;
+  margin-bottom: 6px;
+}
+
+/* === RECOMMENDATIONS LIST === */
+.recommend-list {
+  margin-top: 10px;
+  padding-left: 20px;
+}
+
+.recommend-list li {
+  font-size: 0.9rem;
+  color: #111;
+  margin-bottom: 6px;
+}
+
+/* === Risk Badge === */
+.risk-badge {
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  margin-left: 10px;
+}
+
+.risk-badge.high {
+  background: #ffdddd;
+  color: #b30000;
+}
+.risk-badge.medium {
+  background: #fff4cc;
+  color: #8a6d00;
+}
+.risk-badge.low {
+  background: #ddffec;
+  color: #0f7a35;
+}
+
+/* === Highlighted violation text === */
+mark.highlight {
+  background-color: #fff3cd;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+/* Headings inside card */
+.subheading {
+  margin-top: 12px;
+  font-size: 1rem;
+  color: #1f2d3d;
+  font-weight: 600;
+}
+
+/* Improved Clause Title */
+.improved-title {
+  color: #0d6efd;
+}
+
+/* Clause text sections */
+.original-clause,
+.improved-clause {
+  white-space: pre-wrap;
+  line-height: 1.45;
+  font-size: 0.95rem;
+  margin-bottom: 10px;
+}
+
+/* Law list */
+.law-list {
+  margin-top: 10px;
+  padding-left: 20px;
+}
+.law-list li {
+  font-size: 0.9rem;
+}
+
+/* Clause header */
+.clause-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}

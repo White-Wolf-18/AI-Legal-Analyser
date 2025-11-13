@@ -179,4 +179,130 @@ class IndianLegalBERT:
         }
         return mapping.get(clause_type.lower(), "Indian Contract Act, 1872")
 
+    def generate_improved_clause(self, clause: str, clause_type: str) -> str:
+        """
+        Generate a legally safe & improved version of the clause.
+        This uses NLP heuristics + light rephrasing to reduce risk.
+        """
+        base = clause.strip()
+
+        # Basic transformations
+        base = re.sub(r"\bshall\b", "will", base, flags=re.IGNORECASE)
+        base = re.sub(r"\bpenal\b|\bpenalty\b", "reasonable fee", base, flags=re.IGNORECASE)
+        base = re.sub(r"\bterminate at its sole discretion\b", 
+                      "terminate under reasonable circumstances with written notice",
+                      base, flags=re.IGNORECASE)
+
+        # Standard safe wording templates
+        safety_templates = {
+            "penalty": "Any charges imposed shall be reasonable, proportionate and compliant with Section 74 of the Indian Contract Act, 1872.",
+            "non-compete": "Any restriction shall be reasonable in duration and scope, ensuring compliance with Section 27 of the Indian Contract Act, 1872.",
+            "termination": "Either party may terminate this agreement with written notice, subject to reasonable grounds and applicable law."
+        }
+
+        improved = base
+    
+        # Add legal-compliant safety lines
+        if "penalty" in clause.lower():
+            improved += "\n\n" + safety_templates["penalty"]
+
+        if "non-compete" in clause.lower() or "restraint" in clause.lower():
+            improved += "\n\n" + safety_templates["non-compete"]
+ 
+        if "terminate" in clause.lower():
+            improved += "\n\n" + safety_templates["termination"]
+
+        return improved.strip()
+    
+
+    # ai_models/indian_legal_bert.py (inside class IndianLegalBERT)
+
+    def rewrite_clause(self, clause_text: str, clause_type: str = None, max_length: int = 160) -> str:
+        """
+        Produce an improved, lower-risk rewrite of a clause.
+        - Keep original intent
+        - Make obligations/timeframes concrete
+        - Remove blanket waivers / absolute seizure language
+        - Cap excessive penalty/interest values where possible by suggestion
+        Returns the rewritten clause as plain text. Falls back to rule-based adjustments if generation fails.
+        """
+        # Safety-first short circuit
+        if not clause_text or len(clause_text.strip()) < 20:
+            return clause_text
+
+        # Prompt engineering: explicit instructions
+        instructions = (
+            "Rewrite the following *single legal clause* so it is enforceable under Indian commercial law, "
+            "while preserving the original commercial intent. Do NOT add new obligations that change the intent. "
+            "Make deadlines concrete, replace absolute or one-sided language with balanced wording, "
+            "cap penalty or interest rates to reasonable commercial norms if the clause uses excessive percentages, "
+            "limit non-compete periods to a maximum of 2 years and specify geographic scope, "
+            "remove blanket waivers of legal rights, and require notice & cure periods before remedies. "
+            "Return ONLY the rewritten clause (one paragraph)."
+        )
+
+        prompt = f"{instructions}\n\nClause:\n{clause_text}\n\nRewritten clause:"
+
+        try:
+            out = self.summarizer(
+                prompt,
+                max_length=max_length,
+                min_length=40,
+                do_sample=False,
+                truncation=True
+            )
+            gen = out[0].get("generated_text") or out[0].get("summary_text") or ""
+            gen = gen.strip()
+
+            # Post-processing heuristics:
+            # If generator left an obviously excessive percentage, reduce it programmatically.
+            def _cap_percentages(s):
+                def repl(m):
+                    val = int(m.group(1))
+                    unit = m.group(2) or ""
+                    # business rule caps: monthly rates > 10% -> replace, annual > 60% -> replace
+                    if "month" in unit or "per month" in unit:
+                        if val > 10:
+                            return "10% per month /* capped from {}% */".format(val)
+                    else:
+                        if val > 60:
+                            return "36% per annum /* capped from {}% */".format(val)
+                    return f"{val}% {unit}".strip()
+                return re.sub(r"(\d{1,3})\s*%\s*(per\s*month|per\s*annum|monthly|annually)?", repl, s, flags=re.IGNORECASE)
+ 
+            gen = _cap_percentages(gen)
+
+            # Ensure we didn't return instructions back
+            gen = re.sub(r"^Rewritten clause:\s*", "", gen, flags=re.IGNORECASE).strip()
+
+            # Final truncate to reasonable length
+            if len(gen) > 800:
+                gen = gen[:800].rsplit('.', 1)[0] + '.'
+
+            return gen
+        except Exception as e:
+            # Fallback: simple rule-based safer rewrite (best-effort)
+            clause = clause_text
+
+            # Remove "without notice" madness
+            clause = re.sub(r"\bwithout (prior|any) notice\b", "after a written notice and 7 business days' opportunity to cure", clause, flags=re.IGNORECASE)
+
+            # Replace blanket waivers
+            clause = re.sub(r"\b(waive|waives|waived)\s+(all )?(rights|claims|remedies)\b", "notwithstanding the foregoing, the party shall not waive any mandatory statutory rights", clause, flags=re.IGNORECASE)
+
+            # Cap very high percentages heuristically
+            def cap_percent_fallback(m):
+                v = int(m.group(1))
+                if v > 60:
+                    return "36% per annum"
+                if v > 10 and 'month' in (m.group(2) or ""):
+                    return "10% per month"
+                return m.group(0)
+            clause = re.sub(r"(\d{1,3})\s*%\s*(per\s*month|per\s*annum|monthly|annually)?", cap_percent_fallback, clause, flags=re.IGNORECASE)
+  
+            # Limit non-compete durations > 2 years
+            clause = re.sub(r"non-?compete.*\b(\d{1,2})\s*(years?)\b", "non-compete limited to 2 years in a defined geographic area reasonably required to protect legitimate business interests", clause, flags=re.IGNORECASE)
+
+            return clause
+
 

@@ -160,22 +160,79 @@ class AdvancedRiskEngine:
 
     # -------------------------------------------------------------------------
     def _analyze_pattern_violations(self, clause: str) -> List[Dict]:
-        """Check clause text for pattern-based violations."""
+        """
+        Analyze clause against an extended set of patterns.
+        Returns list of violations with fields:
+          - type ('pattern_violation')
+          - severity ('high'|'medium'|'low')
+          - pattern (human label)
+          - match_text (what was matched)
+          - explanation
+          - statute_reference
+          - score (float 0..1 contribution)
+        """
+        violations = []
         clause_lower = clause.lower()
-        found = []
 
-        for severity, patterns in self.risk_patterns.items():
-            for pattern in patterns:
-                if re.search(pattern["pattern"], clause_lower, re.IGNORECASE):
-                    found.append({
-                        "type": "pattern_violation",
-                        "severity": severity,
-                        "violation_description": pattern["explanation"],
-                        "statute_reference": pattern["statute_reference"],
-                        "explanation": pattern["explanation"]
-                    })
-        return found
+        # improved set of labelled patterns (more exhaustive)
+        PATTERNS = [
+            # High severity explicit steals / absolute rights
+            ("absolute_seizure", r"\b(seize|seizure|take possession of|take any property)\b.*without (prior|any) notice", "High penalty: absolute seizure without notice", "SARFAESI Act, 2002"),
+            ("waive_rights_all", r"\b(waive|waives|waived)\s+(all )?(rights|claims|remedies)\b", "Blanket waiver of legal rights", "Indian Contract Act, 1872"),
+            ("no_appeal_or_court", r"\b(no right of appeal|not open to appeal|final and binding and not open to any court)\b", "Clause excludes judicial review", "Indian Constitution / Civil procedure rules"),
+            ("excessive_penalty_percent", r"(\d{1,3})\s*%\s*(per\s*month|per\s*annum|% per month|% per annum|monthly|annually)?", "Numeric penalty/interest", "Indian Contract Act, 1872 - Section 74"),
+            ("unlimited_liability", r"\b(unlimited liability|unlimited indemnif)", "Unlimited liability", "Indian Contract Act, 1872 - Section 73"),
+            ("non_compete_long", r"non-?compete.*\b(\d{1,2})\s*(years?|year)\b", "Long non-compete period", "Indian Contract Act, 1872 - Section 27"),
+            ("vague_timing", r"\b(whenever possible|at the discretion of|without any notice|immediately without notice)\b", "Vague or unilateral timing/notice", "Indian Contract Act, 1872"),
+            ("termination_at_will", r"\b(terminate.*at (its|the)? sole discretion|absolute right to alter|without any notice)\b", "Unilateral termination without notice", "Indian Contract Act, 1872"),
+            ("confidentiality_overbroad", r"\b(never disclose|without written permission even to government|including government authorities)\b", "Overbroad confidentiality excluding legal obligations", "Information Technology Act / RTI norms"),
+            ("dispute_final_decision", r"\b(final decision of the lender|decision shall be final and binding)\b", "One-sided dispute resolution", "Arbitration/Court jurisprudence")
+        ]
 
+        for label, pattern, explanation, statute_ref in PATTERNS:
+            for m in re.finditer(pattern, clause_lower, flags=re.IGNORECASE):
+                match_text = m.group(0)
+                # base severity
+                if label in ("absolute_seizure", "waive_rights_all", "no_appeal_or_court", "unlimited_liability"):
+                    severity = "high"
+                    score = 1.0
+                elif label in ("excessive_penalty_percent", "non_compete_long", "termination_at_will"):
+                    severity = "medium"
+                    score = 0.6
+                else:
+                    severity = "low"
+                    score = 0.3
+
+                # numeric refinement: if it's a percentage, check magnitude
+                if label == "excessive_penalty_percent":
+                    try:
+                        pct = int(m.group(1))
+                    except Exception:
+                        pct = None
+                    if pct:
+                        # extremely large percentages => upgrade severity
+                        if pct >= 100:
+                            severity = "high"
+                            score = 1.0
+                        elif pct >= 30:
+                            severity = "medium"
+                            score = max(score, 0.7)
+                        else:
+                            severity = "low"
+                            score = max(score, 0.25)
+
+                violations.append({
+                    "type": "pattern_violation",
+                    "pattern_label": label,
+                    "pattern": pattern,
+                    "match_text": match_text.strip(),
+                    "explanation": explanation,
+                    "statute_reference": statute_ref,
+                    "severity": severity,
+                    "score": float(score)
+                })
+
+        return violations
     def _calculate_relevance(self, clause: str, keywords: List[str]) -> float:
         """Compute keyword relevance score."""
         clause_lower = clause.lower()
