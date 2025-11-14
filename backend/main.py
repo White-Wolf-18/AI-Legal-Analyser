@@ -7,6 +7,8 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import re
 
+from fastapi.responses import StreamingResponse
+from docx import Document
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -23,6 +25,60 @@ from dotenv import load_dotenv
 from ai_models.indian_legal_bert import IndianLegalBERT
 from ai_models.risk_engine import AdvancedRiskEngine
 from utils.file_processor import FileProcessor
+
+def build_corrected_document(clauses, analysis_results, threshold=0.20):
+    """
+    Reconstruct the full document by replacing risky clauses
+    with their improved versions while preserving formatting.
+    """
+
+    corrected_parts = []
+
+    # Create a mapping from clause_text → improved_clause
+    improved_map = {}
+    for r in analysis_results:
+        score = float(r.get("risk_score", 0.0))
+        if score >= threshold and r.get("improved_clause"):
+            improved_map[r["clause_text"].strip()] = r["improved_clause"]
+
+    for original in clauses:
+        stripped = original.strip()
+
+        if stripped in improved_map:
+            # Insert corrected version (same formatting as original)
+            corrected_parts.append(improved_map[stripped])
+        else:
+            # Keep original clause untouched
+            corrected_parts.append(original)
+
+    # Join using two newlines (paragraph-level formatting preserved)
+    final_doc = "\n\n".join(corrected_parts)
+    return final_doc
+
+
+def build_corrected_docx(corrected_text: str) -> bytes:
+    """
+    Creates a clean DOCX containing ONLY the corrected (AI-improved) document.
+    """
+    doc = Document()
+
+    # Title
+    title = doc.add_heading("AI-Corrected Legal Document", level=1)
+    title.alignment = 1  # center
+
+    # Corrected document section
+    doc.add_heading("Corrected Document", level=2)
+
+    # Add corrected text paragraph-by-paragraph
+    for para in corrected_text.split("\n"):
+        doc.add_paragraph(para)
+
+    # Save to memory
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
 
 # ==============================
 # Load env
@@ -225,6 +281,7 @@ async def upload_file(file: UploadFile = File(...), user=Depends(get_current_use
 # ==============================
 # /analyze endpoint (continued)
 # ==============================
+
 @app.post("/analyze")
 async def analyze_document(payload: dict, user=Depends(get_current_user)):
     """
@@ -460,6 +517,8 @@ async def analyze_document(payload: dict, user=Depends(get_current_user)):
         "avg_all_score": round(avg_all * 100),
         "combined_overall_score": round(overall_risk_score * 100),
     }
+    # Build corrected document for display
+    corrected_document = build_corrected_document(clauses, results, threshold=0.20)
 
     # --- Final response ---
     return {
@@ -472,7 +531,69 @@ async def analyze_document(payload: dict, user=Depends(get_current_user)):
         "detected_risks": detected_risks,
         "recommendations": final_recommendations,
         "relevant_laws": relevant_laws,
+        "corrected_document": corrected_document,
         "count": len(results),
         "message": message,
+        "has_corrections": any(
+    r.get("improved_clause") and r.get("improved_clause") != r.get("clause_text")
+    for r in risky_clauses
+)
+        ,
+        "original_clauses": clauses,
         "aggregation_debug": aggregation_debug
     }
+
+from fastapi.responses import FileResponse
+from docx import Document
+from docx.shared import Pt
+from docx.enum.text import WD_LINE_SPACING
+
+@app.post("/download-docx")
+async def download_docx(payload: dict, user=Depends(get_current_user)):
+    corrected_text = payload.get("corrected_text", "")
+    filename = payload.get("filename", "Corrected_Document.docx")
+
+    if not corrected_text:
+        raise HTTPException(status_code=400, detail="Missing corrected_text")
+
+    output_path = os.path.join(UPLOAD_DIR, filename)
+
+    # ---- Create DOCX with preserved formatting ----
+    doc = Document()
+
+    # Standard legal doc formatting
+    style = doc.styles["Normal"]
+    style.font.name = "Times New Roman"
+    style.font.size = Pt(12)
+
+    paragraphs = corrected_text.split("\n")
+
+    for line in paragraphs:
+        if line.strip() == "":
+            # Blank line = paragraph break
+            doc.add_paragraph("")
+            continue
+
+        p = doc.add_paragraph()
+        r = p.add_run(line)
+
+        # Legal document paragraph styling
+        p.paragraph_format.space_after = Pt(6)
+        p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
+
+    doc.save(output_path)
+
+    # ---- Return file ----
+    response = FileResponse(
+        output_path,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        filename=filename,
+    )
+
+    # Required CORS headers
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
+
+    return response

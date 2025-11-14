@@ -74,33 +74,131 @@ class AdvancedRiskEngine:
 
     # -------------------------------------------------------------------------
     def _load_statutes(self):
-        """Minimal built-in legal statutes."""
+        """Expanded legal statutes with relevance metadata."""
         return {
+            # ---------------------------------------------------------
+            # CONTRACT LAW
+            # ---------------------------------------------------------
             "Indian Contract Act, 1872 – Section 73": {
                 "section": "Section 73",
                 "description": "Compensation for loss or damage caused by breach of contract.",
-                "keywords": ["breach", "compensation", "damages", "loss"],
-                "applicable_clauses": ["loan", "employment", "rental", "partnership"]
+                "keywords": ["breach", "compensation", "damages", "loss", "claim", "default"],
+                "applicable_clauses": ["loan", "employment", "rental", "partnership", "penalty"]
             },
             "Indian Contract Act, 1872 – Section 27": {
                 "section": "Section 27",
-                "description": "Agreements in restraint of trade are void.",
-                "keywords": ["non-compete", "restraint", "trade"],
-                "applicable_clauses": ["employment", "partnership"]
+                "description": "Agreements in restraint of trade are void unless they fall under statutory exceptions.",
+                "keywords": ["non-compete", "restraint", "trade", "competition", "restrictive covenant"],
+                "applicable_clauses": ["employment", "partnership", "business_restriction"]
             },
             "Indian Contract Act, 1872 – Section 74": {
                 "section": "Section 74",
-                "description": "Penalty for breach of contract.",
-                "keywords": ["penalty", "fine", "default"],
-                "applicable_clauses": ["loan", "employment", "rental"]
+                "description": "Parties must prove reasonable compensation for breach. Excessive penalties are void.",
+                "keywords": ["penalty", "fine", "liquidated damages", "reasonable compensation"],
+                "applicable_clauses": ["loan", "employment", "security", "rental", "penalty"]
             },
+
+            # General overview (non-section-specific)
+            "Indian Contract Act, 1872": {
+                "section": "General",
+                "description": (
+                    "The foundational law governing contracts in India. It defines valid contracts, free consent, lawful "
+                    "consideration, breach, void agreements, and rules regarding enforceability."
+                ),
+                "keywords": ["contract", "agreement", "void", "voidable", "consent", "consideration"],
+                "applicable_clauses": ["general", "employment", "loan", "business"]
+            },
+
+            # ---------------------------------------------------------
+            # PROPERTY & TRANSFER
+            # ---------------------------------------------------------
+            "Transfer of Property Act, 1882": {
+                "section": "General",
+                "description": (
+                    "Governs the transfer of property between living persons, covering sales, mortgages, leases, gifts, "
+                    "and actionable claims."
+                ),
+                "keywords": ["property", "transfer", "lease", "mortgage", "sale", "gift"],
+                "applicable_clauses": ["rental", "property", "mortgage", "sale"]
+            },
+            "Indian Easements Act, 1882": {
+                "section": "General",
+                "description": (
+                    "Defines easements — rights enjoyed by one property owner over another's property, such as right of way, "
+                    "right to light, or right to air."
+                ),
+                "keywords": ["easement", "right of way", "access", "light", "air"],
+                "applicable_clauses": ["property", "access", "rights"]
+           },
+            "Registration Act, 1908": {
+                "section": "General",
+                "description": (
+                    "Makes registration of certain documents mandatory, including sale deeds, lease deeds, and property transfers "
+                    "to ensure legal enforceability and title clarity."
+                ),
+                "keywords": ["registration", "deed", "property", "sale deed", "title"],
+                "applicable_clauses": ["property", "sale", "lease", "mortgage"]
+            },
+            "Hindu Succession Act, 1956": {
+                "section": "General",
+                "description": (
+                    "Governs inheritance and succession for Hindus, Buddhists, Jains, and Sikhs. Ensures equal rights "
+                    "for male and female heirs after the 2005 amendment."
+                ),
+                "keywords": ["inheritance", "succession", "property", "heir", "family"],
+                "applicable_clauses": ["property", "inheritance"]
+            },
+            "Indian Succession Act, 1925": {
+                "section": "General",
+                "description": (
+                    "Governs succession for communities other than Hindus unless exempted, covering both intestate and "
+                    "testamentary succession."
+                ),
+                "keywords": ["will", "succession", "inheritance", "executor", "estate"],
+                "applicable_clauses": ["inheritance", "property"]
+            },
+            "Constitution of India – Article 300A": {
+                "section": "Article 300A",
+                "description": (
+                    "Provides a constitutional right to property. No person can be deprived of property except by authority of law."
+                ),
+                "keywords": ["property", "right", "acquisition", "government"],
+                "applicable_clauses": ["property", "land acquisition"]
+            },
+
+            # ---------------------------------------------------------
+            # CIVIL PROCEDURE & EVIDENCE
+            # ---------------------------------------------------------
+            "Code of Civil Procedure, 1908": {
+                "section": "General",
+                "description": (
+                    "Provides procedural rules for filing, trial, appeals, execution of decrees, and civil court functioning."
+                ),
+                "keywords": ["civil procedure", "appeal", "trial", "jurisdiction", "suit"],
+                "applicable_clauses": ["dispute", "litigation", "agreement"]
+            },
+            "Indian Evidence Act, 1872": {
+                "section": "General",
+                "description": (
+                    "Defines what evidence is admissible, relevant, and how facts must be proved in court. Governs burden of proof."
+                ),
+                "keywords": ["evidence", "proof", "admissibility", "court"],
+                "applicable_clauses": ["dispute", "litigation"]
+            },
+
+            # ---------------------------------------------------------
+            # LOAN / SECURITY
+            # ---------------------------------------------------------
             "SARFAESI Act, 2002": {
                 "section": "Section 13",
-                "description": "Enforcement of security interest by secured creditors.",
-                "keywords": ["security", "pledge", "collateral"],
+                "description": (
+                    "Allows banks and financial institutions to enforce security interests without court intervention when a borrower defaults."
+                ),
+                "keywords": ["security", "collateral", "seizure", "default", "secured creditor"],
                 "applicable_clauses": ["loan", "security", "mortgage"]
-            }
+            },
         }
+
 
     # -------------------------------------------------------------------------
     def analyze_risk_with_statutes(self, clause: str, clause_type: str) -> Dict:
