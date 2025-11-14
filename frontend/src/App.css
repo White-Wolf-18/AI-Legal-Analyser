@@ -818,3 +818,422 @@ mark.highlight {
   align-items: center;
   justify-content: space-between;
 }
+
+
+/* =======================================
+   CORRECTED DOCUMENT SECTION (Final)
+======================================= */
+
+.corrected-doc-container {
+  margin-top: 2.5rem;
+  padding: 1.75rem;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #e1e1e1;
+  box-shadow: 0px 4px 14px rgba(0, 0, 0, 0.06);
+}
+
+/* Section Title */
+.corrected-doc-container h2 {
+  font-size: 1.7rem;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Toggle Button Row */
+.corrected-toggle-buttons {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 1.5rem;
+}
+
+/* Toggle Buttons */
+.corrected-toggle-buttons button {
+  padding: 10px 18px;
+  border-radius: 12px;
+  border: none;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.corrected-toggle-buttons button.active {
+  background-color: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+  transform: translateY(-1px);
+}
+
+.corrected-toggle-buttons button.inactive {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.corrected-toggle-buttons button.inactive:hover {
+  background: #d1d5db;
+}
+
+/* Document Display Box */
+.corrected-doc-box {
+  white-space: pre-wrap;
+  background: #f9fafb;
+  padding: 1.4rem;
+  border-radius: 14px;
+  border: 1px solid #d7d7d7;
+  color: #1f2937;
+  font-size: 1rem;
+  line-height: 1.65;
+  max-height: 480px;
+  overflow-y: auto;
+  transition: all 0.2s ease;
+}
+
+/* Scrollbar */
+.corrected-doc-box::-webkit-scrollbar {
+  width: 7px;
+}
+
+.corrected-doc-box::-webkit-scrollbar-thumb {
+  background: #c7c7c7;
+  border-radius: 4px;
+}
+
+.corrected-doc-box::-webkit-scrollbar-thumb:hover {
+  background: #a6a6a6;
+}
+
+/* Fade animation between Original / Corrected tabs */
+.corrected-doc-box {
+  animation: fadeIn 0.25s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* =======================================
+   DOWNLOAD BUTTON
+======================================= */
+
+.text-center .download-btn,
+.download-btn {
+  padding: 0.9rem 1.5rem;
+  font-size: 1rem;
+  border-radius: 10px;
+  border: none;
+  background-color: #059669; /* emerald-600 */
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  box-shadow: 0px 3px 10px rgba(5, 150, 105, 0.35);
+}
+
+.text-center .download-btn:hover,
+.download-btn:hover {
+  background-color: #047857; /* emerald-700 */
+  transform: translateY(-1px);
+}
+
+.text-center .download-btn:active,
+.download-btn:active {
+  transform: translateY(0);
+  background-color: #065f46;
+}
+
+/* =======================================
+   THREE-WAY VIEW SWITCHER
+======================================= */
+
+/* Comparison Grid */
+.compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 10px;
+}
+
+/* Individual Columns */
+.compare-column {
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #d4d4d4;
+  padding: 14px;
+  overflow-y: auto;
+  max-height: 450px;
+}
+
+/* Comparison Titles */
+.compare-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.original-title {
+  color: #1f2937; /* gray-800 */
+}
+
+.improved-title {
+  color: #0f766e; /* teal-700 */
+}
+
+/* Code-like block text */
+.compare-column pre {
+  white-space: pre-wrap;
+  font-family: "Inter", sans-serif;
+  line-height: 1.55;
+  color: #374151;
+}
+
+/* Document-like formatting */
+.docx-view {
+  white-space: normal;
+  font-family: "Times New Roman", serif;
+  font-size: 16px;
+  line-height: 1.55;
+  color: #222;
+  padding: 10px;
+}
+
+/* Paragraph styling like DOCX */
+.doc-paragraph {
+  margin-bottom: 14px;
+  text-align: justify;
+}
+
+/* Main container */
+.corrected-doc-box {
+  background: #fafafa;
+  border-radius: 14px;
+  border: 1px solid #ddd;
+  padding: 20px;
+  max-height: 550px;
+  overflow-y: auto;
+}
+
+/* Button styles unchanged (but polished) */
+.corrected-toggle-buttons {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.corrected-toggle-buttons button {
+  padding: 10px 20px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.2s ease;
+}
+
+.corrected-toggle-buttons .active {
+  background: #2563eb;
+  color: white;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.4);
+}
+
+.corrected-toggle-buttons .inactive {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.compare-column {
+  background: white;
+  border-radius: 12px;
+  padding: 14px;
+  border: 1px solid #ccc;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+/* Premium Download Button */
+button.px-6.py-3.bg-green-600.text-white.rounded-lg.shadow.hover\:bg-green-700 {
+  background: linear-gradient(135deg, #3bb273 0%, #2d955c 100%);
+  color: white;
+  font-weight: 600;
+  border-radius: 12px;
+  padding: 12px 28px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  font-size: 16px;
+  box-shadow: 0 3px 10px rgba(45, 149, 92, 0.25);
+  display: inline-block;
+}
+
+/* Hover effect */
+button.px-6.py-3.bg-green-600.text-white.rounded-lg.shadow.hover\:bg-green-700:hover {
+  background: linear-gradient(135deg, #44c981 0%, #2a8c55 100%);
+  box-shadow: 0 4px 14px rgba(45, 149, 92, 0.35);
+  transform: translateY(-2px);
+}
+
+/* Active click animation */
+button.px-6.py-3.bg-green-600.text-white.rounded-lg.shadow.hover\:bg-green-700:active {
+  transform: translateY(0px);
+  box-shadow: 0 2px 6px rgba(45, 149, 92, 0.25);
+}
+
+.filename-input {
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  border: 1px solid #d0d0d0;
+  width: 260px;
+  font-size: 15px;
+  transition: 0.2s ease;
+}
+
+.filename-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.3);
+}
+.filename-input {
+  margin-top: 10px;
+}
+
+/* ============================
+   LOW RISK – GREEN THEME
+============================ */
+.theme-low {
+  background: #f2fff5 !important;
+  border: 1px solid #c6f5cf !important;
+}
+
+.theme-low h3,
+.theme-low .risk-score,
+.theme-low .risk-caption {
+  color: #0f8a2f !important;
+}
+
+.theme-low .risk-bar {
+  background: #e2f7e9 !important; 
+}
+
+.theme-low .risk-fill {
+  background: linear-gradient(90deg, #26c14d, #0f8a2f) !important;
+}
+
+/* ============================
+   MEDIUM RISK – ORANGE THEME
+============================ */
+.theme-medium {
+  background: #fff6e4 !important;
+  border: 1px solid #ffd7a1 !important;
+}
+
+.theme-medium h3,
+.theme-medium .risk-score,
+.theme-medium .risk-caption {
+  color: #d87f00 !important;
+}
+
+.theme-medium .risk-bar {
+  background: #fff1d6 !important; 
+}
+
+.theme-medium .risk-fill {
+  background: linear-gradient(90deg, #ffb347, #ff8c00) !important;
+}
+
+/* ============================
+   HIGH RISK – RED THEME
+============================ */
+.theme-high {
+  background: #ffecec !important;
+  border: 1px solid #ffb3b3 !important;
+}
+
+.theme-high h3,
+.theme-high .risk-score,
+.theme-high .risk-caption {
+  color: #d11a1a !important;
+}
+
+.theme-high .risk-bar {
+  background: #ffe1e1 !important; 
+}
+
+.theme-high .risk-fill {
+  background: linear-gradient(90deg, #ff6b6b, #d11a1a) !important;
+}
+
+/* ==============================
+   LAW INFO MODAL (Floating Window)
+   ============================== */
+
+.law-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+  backdrop-filter: blur(4px);
+}
+
+.law-modal {
+  background: white;
+  padding: 24px;
+  width: 420px;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+  animation: fadeIn 0.25s ease;
+}
+
+.law-modal-title {
+  margin-top: 0;
+  font-size: 1.4rem;
+  color: #1f2937;
+}
+
+.law-modal-description {
+  font-size: 1rem;
+  color: #374151;
+  margin-top: 10px;
+  line-height: 1.5;
+}
+
+.law-modal-close {
+  margin-top: 18px;
+  padding: 10px 18px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.law-modal-close:hover {
+  background: #1d4ed8;
+}
+
+/* clickable law items */
+.law-clickable {
+  cursor: pointer;
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.law-clickable:hover {
+  color: #1e40af;
+}
+
