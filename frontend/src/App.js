@@ -51,9 +51,7 @@ const lawExplanations = {
       "This law defines easements — legal rights enjoyed by a person over another's land (e.g., right of way, right to light and air). It governs how easements are created, transferred, and extinguished.",
   },
 
-  // ----------------------------------------------------
   // CIVIL CASES
-  // ----------------------------------------------------
 
   "Code of Civil Procedure, 1908": {
     title: "Code of Civil Procedure (CPC), 1908",
@@ -66,10 +64,14 @@ const lawExplanations = {
     description:
       "This Act governs the admissibility, relevancy, and evaluation of evidence in court. It defines what facts can be proved, the types of evidence allowed, burden of proof, and the standards required to establish truth in judicial proceedings.",
   },
+   
+  "Indian Evidence Act, 1872 – General": {
+  title: "Indian Evidence Act, 1872 — General Principles",
+  description:
+    "The Indian Evidence Act, 1872 establishes the rules governing what facts, documents, and statements are admissible in judicial proceedings. It defines key concepts such as relevancy of facts, burden of proof, presumptions, oral and documentary evidence, expert testimony, and the standards required for proving or disproving facts in court. The Act ensures that evidence presented is reliable, legally obtained, and capable of establishing truth in both civil and criminal cases."
+  },
 
-  // ----------------------------------------------------
   // LAND & PROPERTY
-  // ----------------------------------------------------
 
   "Constitution of India – Article 300A": {
     title: "Article 300A — Right to Property",
@@ -112,10 +114,6 @@ function triggerDownloadCorrectedDoc(text, token, docName = "Corrected_Document"
       window.URL.revokeObjectURL(url);
     });
 }
-
-
-
-
 
 function highlightViolations(text, violations = []) {
   if (!violations || violations.length === 0) return text;
@@ -211,9 +209,7 @@ function App() {
     }
   }
 
-  // -------------------------------
   // LOGIN SCREEN
-  // -------------------------------
   if (!token) {
     return (
       <div className="login-page">
@@ -261,9 +257,7 @@ function App() {
     );
   }
 
-  // -------------------------------
   // MAIN APP
-  // -------------------------------
   return (
     <div className="container-custom">
       <header className="app-header">
@@ -313,7 +307,7 @@ function App() {
       {loading && <div className="alert alert-info">⏳ Analyzing your document…</div>}
       {error && <div className="alert alert-danger">{error}</div>}
 
-      {/* === RESULTS === */}
+      {/* RESULTS */}
       {results && (
         <section className="result-card">
           {/* RISK OVERVIEW */}
@@ -353,9 +347,7 @@ function App() {
             <p style={{ whiteSpace: "pre-wrap" }}>{results.summary}</p>
           </div>
 
-          {/* =====================
-              TOP RISKY CLAUSES
-          ====================== */}
+          {/* TOP RISKY CLAUSES */}
           {results.risky_clauses?.length > 0 && (
             <div className="result-block">
               <h4>⚠️ Top Risky Clauses</h4>
@@ -382,7 +374,7 @@ function App() {
 
                     {/* Improved Version */}
                     <h5 className="subheading improved-title">
-                      ✨ Improved Version (Legally Safer)
+                      ✨ Improved Legally Safer Version
                     </h5>
 
                     {c.improved_clause ? (
@@ -394,7 +386,7 @@ function App() {
                     )}
 
                     {/* Legal References */}
-                    {c.legal_references?.length > 0 && (
+                    {/* {c.legal_references?.length > 0 && (
                       <ul className="law-list">
                         {c.legal_references.map((law, j) => (
                           <li key={j}>
@@ -402,24 +394,26 @@ function App() {
                           </li>
                         ))}
                       </ul>
-                    )}
+                    )} */}
                   </div>
                 );
               })}
             </div>
           )}
 
-          {/* Recommendations */}
-          {results.recommendations?.length > 0 && (
-            <div className="result-block">
-              <h4>💡 Recommendations</h4>
-              <ul>
-                {results.recommendations.map((rec, i) => (
-                  <li key={i}>{rec}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {/* Recommendations — ONLY shown when no risky clauses exist */}
+{(!results.risky_clauses || results.risky_clauses.length === 0) &&
+  results.recommendations?.length > 0 && (
+    <div className="result-block">
+      <h4>🛡️ Legal Safety Check</h4>
+      <ul>
+        {results.recommendations.map((rec, i) => (
+          <li key={i}>{rec}</li>
+        ))}
+      </ul>
+    </div>
+)}
+
 
           {/* Relevant Laws */}
           {results.relevant_laws?.length > 0 && (
@@ -446,9 +440,7 @@ function App() {
         </section>
       )}
 
-      {/* ============================
-            Corrected Document Section
-          ============================ */}
+      {/* Corrected Document Section */}
       {results?.has_corrections && results.corrected_document && (
   <CorrectedDocument
     originalClauses={results.original_clauses || []}
