@@ -259,78 +259,206 @@ class AdvancedRiskEngine:
     # -------------------------------------------------------------------------
     def _analyze_pattern_violations(self, clause: str) -> List[Dict]:
         """
-        Analyze clause against an extended set of patterns.
-        Returns list of violations with fields:
-          - type ('pattern_violation')
-          - severity ('high'|'medium'|'low')
-          - pattern (human label)
-          - match_text (what was matched)
-          - explanation
-          - statute_reference
-          - score (float 0..1 contribution)
+        Detect legally risky clauses across:
+        - Agreements (service, employment, loan, partnership)
+        - Deeds (sale deed, gift deed, mortgage, lease)
+        - NDAs, licensing, distribution agreements
+        - Property transfers, succession, easements
+        - Indian contract law compliance (S.27, S.73, S.74)
+        - Registration & Property law compliance (TPA 1882, RA 1908)
+        - Security interests (SARFAESI)
         """
-        violations = []
-        clause_lower = clause.lower()
 
-        # improved set of labelled patterns (more exhaustive)
+        violations = []
+        c = clause.lower()
+
+    # -------------------------------
+    # MASTER PATTERN SET
+    # -------------------------------
         PATTERNS = [
-            # High severity explicit steals / absolute rights
-            ("absolute_seizure", r"\b(seize|seizure|take possession of|take any property)\b.*without (prior|any) notice", "High penalty: absolute seizure without notice", "SARFAESI Act, 2002"),
-            ("waive_rights_all", r"\b(waive|waives|waived)\s+(all )?(rights|claims|remedies)\b", "Blanket waiver of legal rights", "Indian Contract Act, 1872"),
-            ("no_appeal_or_court", r"\b(no right of appeal|not open to appeal|final and binding and not open to any court)\b", "Clause excludes judicial review", "Indian Constitution / Civil procedure rules"),
-            ("excessive_penalty_percent", r"(\d{1,3})\s*%\s*(per\s*month|per\s*annum|% per month|% per annum|monthly|annually)?", "Numeric penalty/interest", "Indian Contract Act, 1872 - Section 74"),
-            ("unlimited_liability", r"\b(unlimited liability|unlimited indemnif)", "Unlimited liability", "Indian Contract Act, 1872 - Section 73"),
-            ("non_compete_long", r"non-?compete.*\b(\d{1,2})\s*(years?|year)\b", "Long non-compete period", "Indian Contract Act, 1872 - Section 27"),
-            ("vague_timing", r"\b(whenever possible|at the discretion of|without any notice|immediately without notice)\b", "Vague or unilateral timing/notice", "Indian Contract Act, 1872"),
-            ("termination_at_will", r"\b(terminate.*at (its|the)? sole discretion|absolute right to alter|without any notice)\b", "Unilateral termination without notice", "Indian Contract Act, 1872"),
-            ("confidentiality_overbroad", r"\b(never disclose|without written permission even to government|including government authorities)\b", "Overbroad confidentiality excluding legal obligations", "Information Technology Act / RTI norms"),
-            ("dispute_final_decision", r"\b(final decision of the lender|decision shall be final and binding)\b", "One-sided dispute resolution", "Arbitration/Court jurisprudence")
+
+        # ======================
+        # CONTRACT ACT – Section 27 (Restraint of Trade)
+        # ======================
+            ("restraint_of_trade",
+             r"(non[- ]?compete|restrict(s)? (trade|business)|cannot engage in (any|similar) business)",
+             "Potential restraint of trade. Section 27 makes such clauses void.",
+             "Indian Contract Act, 1872 – Section 27", "high"),
+
+        # ======================
+        # CONTRACT ACT – Section 74 (Penalty)
+        # ======================
+            ("excessive_penalty",
+             r"(\d{1,3})\s*%.*(penalty|fine|late fee|late charge|liquidated)",
+             "Penalty percentages may be excessive and unenforceable (S.74).",
+             "Indian Contract Act, 1872 – Section 74", "medium"),
+
+            ("arbitrary_penalty",
+             r"(penalty|fine).*(sole discretion|without reason|without cause)",
+             "Penalty imposed arbitrarily is unlawful under S. 74.",
+             "Indian Contract Act, 1872 – Section 74", "high"),
+
+        # ======================
+        # UNLIMITED LIABILITY / INDEMNITY (S.73)
+        # ======================
+            ("unlimited_liability",
+             r"(unlimited liability|indemnify.*(all|any) losses|full indemnity without limit)",
+             "Unlimited liability / indemnity violates proportionality under S.73.",
+             "Indian Contract Act, 1872 – Section 73", "high"),
+
+        # ======================
+        # UNILATERAL TERMINATION / AMENDMENT
+        # ======================
+            ("unilateral_change",
+             r"(may|can) (amend|change|modify) .* (sole discretion|without notice)",
+             "Unilateral amendments without mutual consent are risky.",
+             "Indian Contract Act, 1872 – Section 62", "medium"),
+
+            ("unilateral_termination",
+             r"(terminate|cancel).*(sole discretion|without notice|without reason)",
+             "Termination without notice leads to unfairness and is challengeable.",
+             "Indian Contract Act, 1872", "high"),
+
+        # ======================
+        # WAIVER OF LEGAL RIGHTS (Void)
+        # ======================
+            ("waiver_of_rights",
+             r"(waive(s)?|relinquish(es)?) (all )?(rights|claims|remedies)",
+             "Blanket waiver of legal rights is unenforceable.",
+             "Indian Contract Act, 1872", "high"),
+
+        # ======================
+        # NO COURT / NO APPEAL CLAUSES (Void)
+        # ======================
+            ("no_court_access",
+             r"(not open to appeal|no right to appeal|final and binding.*not.*court)",
+             "Parties cannot contract out of judicial remedies. Such clauses are void.",
+             "CPC 1908 + Constitution Art. 14", "high"),
+
+        # ======================
+        # PROPERTY / DEEDS – REGISTRATION ACT, 1908
+        # ======================
+            ("unregistered_property",
+             r"(unregistered|not registered|without registration)",
+             "Property transfers (sale/lease/mortgage) must be registered.",
+             "Registration Act, 1908", "high"),
+
+            ("missing_boundaries",
+             r"(boundary|measurements|plot|survey).*(not mentioned|not defined|unclear|approx)",
+             "Property description is vague – leads to title disputes.",
+             "Transfer of Property Act, 1882", "medium"),
+
+        # ======================
+        # PROPERTY – EASEMENTS
+        # ======================
+            ("easement_risk",
+             r"(right of way|easement|right to light|right to air)",
+             "Easement rights must be clearly defined.",
+             "Indian Easements Act, 1882", "medium"),
+
+        # ======================
+        # LOAN / SECURITY – SARFAESI
+        # ======================
+            ("seizure_without_notice",
+             r"(seize|take possession).*(without notice|immediately without notice)",
+             "Security enforcement requires procedural fairness.",
+             "SARFAESI Act, 2002 – Section 13", "high"),
+
+            ("all_assets_as_security",
+             r"(all present and future assets|entire property|blanket charge)",
+             "Overbroad security creation may be unenforceable.",
+             "SARFAESI Act + TPA 1882", "high"),
+
+        # ======================
+        # NDA RISKS
+        # ======================
+            ("overbroad_nda",
+             r"(never disclose|cannot disclose to government|not even to authorities)",
+             "Overbroad confidentiality can be illegal (RTI, regulatory disclosure).",
+             "Information Technology Act + Evidence Act", "medium"),
+
+        # ======================
+        # LICENSING RISKS
+        # ======================
+            ("license_revocation_unfair",
+             r"license.*(revoked|terminated).*(without notice|sole discretion)",
+             "Unilateral license termination creates heavy business risk.",
+             "Indian Contract Act, 1872", "medium"),
+
+            ("license_ip_unclear",
+             r"(intellectual property|IP|copyright|patent).*(not defined|unclear|ambiguous)",
+             "IP ownership / rights must be clearly specified.",
+             "Copyright Act / Indian Contract Act", "medium"),
+
+        # ======================
+        # DISTRIBUTION AGREEMENT RISKS
+        # ======================
+            ("exclusive_distribution_without_minimums",
+             r"exclusive.*(distributor|distribution).*no minimum|without minimum",
+             "Exclusive distribution requires clear performance obligations.",
+             "Contract Law – Reasonableness", "medium"),
+
+            ("territory_not_defined",
+             r"exclusive.*(territory|region|area).*(not defined|unclear)",
+             "Exclusive territory must be clearly identified.",
+            "Competition / Contract law", "medium"),
+
+        # ======================
+        # SUCCESSION / WILL / GIFT / PROPERTY TRANSFER
+        # ======================
+            ("succession_unclear",
+             r"(inheritance|succession|heir|coparcenary).*not.*(specified|defined)",
+             "Unclear succession creates legal disputes.",
+             "Hindu Succession Act, 1956 / Indian Succession Act, 1925", "medium"),
+
+            ("gift_without_acceptance",
+             r"gift.*(without acceptance|no acceptance)",
+             "Gift is invalid without acceptance.",
+             "Transfer of Property Act, 1882 – Section 122", "high"),
+
+        # ======================
+        # PROCEDURAL / EVIDENCE ACT
+        # ======================
+            ("no_written_record",
+             r"(oral agreement|not recorded|no written record)",
+             "Lack of documentation weakens enforceability.",
+             "Indian Evidence Act, 1872", "medium"),
         ]
 
-        for label, pattern, explanation, statute_ref in PATTERNS:
-            for m in re.finditer(pattern, clause_lower, flags=re.IGNORECASE):
-                match_text = m.group(0)
-                # base severity
-                if label in ("absolute_seizure", "waive_rights_all", "no_appeal_or_court", "unlimited_liability"):
-                    severity = "high"
-                    score = 1.0
-                elif label in ("excessive_penalty_percent", "non_compete_long", "termination_at_will"):
-                    severity = "medium"
-                    score = 0.6
-                else:
-                    severity = "low"
-                    score = 0.3
+    # -------------------------------
+    # PATTERN MATCH LOOP
+    # -------------------------------
+        for label, pattern, explanation, statute_ref, severity in PATTERNS:
+            matches = list(re.finditer(pattern, c, flags=re.IGNORECASE))
+            for m in matches:
 
-                # numeric refinement: if it's a percentage, check magnitude
-                if label == "excessive_penalty_percent":
+                match_text = m.group(0)
+                score = 1.0 if severity == "high" else 0.6 if severity == "medium" else 0.3
+
+            # % refinement
+                if label == "excessive_penalty":
                     try:
                         pct = int(m.group(1))
-                    except Exception:
-                        pct = None
-                    if pct:
-                        # extremely large percentages => upgrade severity
                         if pct >= 100:
-                            severity = "high"
-                            score = 1.0
+                            severity = "high"; score = 1.0
                         elif pct >= 30:
-                            severity = "medium"
-                            score = max(score, 0.7)
-                        else:
-                            severity = "low"
-                            score = max(score, 0.25)
+                            severity = "medium"; score = 0.7
+                    except:
+                        pass
 
                 violations.append({
                     "type": "pattern_violation",
                     "pattern_label": label,
-                    "pattern": pattern,
-                    "match_text": match_text.strip(),
+                    "match_text": match_text,
                     "explanation": explanation,
                     "statute_reference": statute_ref,
+                    "violation_description": explanation,
                     "severity": severity,
                     "score": float(score)
                 })
 
         return violations
+
     def _calculate_relevance(self, clause: str, keywords: List[str]) -> float:
         """Compute keyword relevance score."""
         clause_lower = clause.lower()
@@ -419,3 +547,9 @@ class AdvancedRiskEngine:
         # Return top 3 for clarity
         return legal_refs[:3]
 
+    def analyze_clause(self, clause: str, clause_type: str = "general"):
+        """
+        Old compatibility wrapper – now same as analyze_risk_with_statutes().
+        This restores compatibility with old LegalBERT-based workflow.
+        """
+        return self.analyze_risk_with_statutes(clause, clause_type)

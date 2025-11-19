@@ -363,9 +363,9 @@ async def _analyze_document_internal(payload: dict) -> dict:
     overall_risk_score = (0.50 * max_score) + (0.35 * avg_top) + (0.15 * avg_all)
     overall_risk_score = max(0.0, min(1.0, overall_risk_score))
 
-    if overall_risk_score >= 0.65:
+    if overall_risk_score >= 0.70:
         overall_risk_level = "High"
-    elif overall_risk_score >= 0.35:
+    elif overall_risk_score >= 0.20:
         overall_risk_level = "Medium"
     else:
         overall_risk_level = "Low"
