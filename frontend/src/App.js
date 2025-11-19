@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+//import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+
 import { login, uploadFile, analyzeText, analyzeStored } from "./api";
 import "./App.css";
 import CorrectedDocument from "./components/CorrectedDocument";
@@ -148,6 +150,33 @@ function App() {
   const [selectedLaw, setSelectedLaw] = useState(null);
 
 
+    // --- Dark mode state (persisted) ---
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      return localStorage.getItem("theme-mode") === "dark";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    // Apply class to body and persist to localStorage
+    if (darkMode) {
+      document.body.classList.add("dark-mode");
+      try { localStorage.setItem("theme-mode", "dark"); } catch {}
+    } else {
+      document.body.classList.remove("dark-mode");
+      try { localStorage.setItem("theme-mode", "light"); } catch {}
+    }
+    // cleanup on unmount not necessary (kept for clarity)
+    return () => {};
+  }, [darkMode]);
+
+  function toggleDarkMode() {
+    setDarkMode((prev) => !prev);
+  }
+
+
   async function handleLogin(e) {
     e.preventDefault();
     setError(null);
@@ -260,7 +289,7 @@ function App() {
   // MAIN APP
   return (
     <div className="container-custom">
-      <header className="app-header">
+            <header className="app-header">
         <div className="header-left">
           <div className="title-block">
             <h2>⚖️ LegalAI Assistant</h2>
@@ -269,10 +298,32 @@ function App() {
             </p>
           </div>
         </div>
-        <div className="user-info">
-          <b>{email}</b>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Dark mode toggle */}
+          <button
+            onClick={toggleDarkMode}
+            aria-label="Toggle dark mode"
+            className="theme-toggle-btn"
+            style={{
+              padding: "8px 12px",
+              borderRadius: 10,
+              border: "1px solid rgba(0,0,0,0.08)",
+              background: darkMode ? "#0f172a" : "#f3f4f6",
+              color: darkMode ? "#e6eef8" : "#0f172a",
+              cursor: "pointer",
+              fontWeight: 600
+            }}
+          >
+            {darkMode ? "☀️ Light" : "🌙 Dark"}
+          </button>
+
+          <div className="user-info" style={{ marginLeft: 6 }}>
+            <b>{email}</b>
+          </div>
         </div>
       </header>
+
 
       {/* Upload Section */}
       <section className="section-box">

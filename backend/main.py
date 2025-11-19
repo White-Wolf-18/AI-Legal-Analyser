@@ -217,6 +217,56 @@ def build_corrected_docx_bytes(corrected_text: str) -> bytes:
     buf.seek(0)
     return buf.read()
 
+def clean_document_boilerplate(text: str) -> str:
+    """
+    Removes judicial headers, e-stamp metadata, footers, disclaimers,
+    and extracts only the actual agreement body.
+    """
+
+    # Common noisy patterns in Indian legal PDFs
+    boilerplate_patterns = [
+        r"eSahayak\.io.*?\n",                  # e-Sahayak watermark
+        r"Sample.*?\n",                        # sample page text
+        r"Stamp Duty.*?\n",                    # stamp header
+        r"Crove\.app.*?\n",                    # Crove watermark
+        r"Government of.*?\n",                 # Gov headers
+        r"Notary.*?\n",
+        r"Digitally signed.*?\n",
+        r"Page \d+ of \d+",                    # page numbers
+        r"-----.*?-----",                      # separators
+    ]
+
+    # Remove each pattern
+    cleaned = text
+    for p in boilerplate_patterns:
+        cleaned = re.sub(p, "", cleaned, flags=re.IGNORECASE | re.DOTALL)
+
+    # Now detect start of a real agreement
+    start_markers = [
+        "THIS AGREEMENT",
+        "THIS DEED",
+        "RENT AGREEMENT",
+        "MEMORANDUM OF UNDERSTANDING",
+        "NOW THIS AGREEMENT",
+        "NOW THIS DEED",
+        "WITNESSETH",
+        "TERMS AND CONDITIONS",
+    ]
+
+    # Find earliest hit
+    start_index = None
+    for marker in start_markers:
+        loc = cleaned.upper().find(marker)
+        if loc != -1:
+            if start_index is None or loc < start_index:
+                start_index = loc
+
+    # If marker found → cut everything before it
+    if start_index is not None:
+        cleaned = cleaned[start_index:]
+
+    return cleaned.strip()
+
 async def _analyze_document_internal(payload: dict) -> dict:
     text = payload.get("text")
     stored_filename = payload.get("stored_filename")
@@ -240,6 +290,9 @@ async def _analyze_document_internal(payload: dict) -> dict:
 
     if not text or not text.strip():
         raise HTTPException(status_code=400, detail="text or stored_filename required")
+    
+    # Clean e-stamp pages, judicial headers, noise
+    text = clean_document_boilerplate(text)
 
     # clauses segmentation
     try:
@@ -256,6 +309,9 @@ async def _analyze_document_internal(payload: dict) -> dict:
 
     # analyze each clause
     for clause in clauses[:MAX_CLAUSES]:
+        if len(clause.strip()) < 20:
+            continue
+
         clause_type = "general"
         confidence = 0.0
         try:
